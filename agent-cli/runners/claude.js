@@ -2,16 +2,16 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 
 function runClaude(stage, input, output, workspace) {
-  const systemPrompt = fs.readFileSync(input, "utf-8");
+  const prompt = fs.readFileSync(input, "utf-8");
 
   const result = spawnSync("claude", [
-    "-p",
-    "--model", "sonnet-4.5",
+    "--dangerously-skip-permissions",
+    "-p", "Execute the stage instructions above.",
+    "--model", "sonnet",
     "--output-format", "json",
-    "--system", systemPrompt,
   ], {
     cwd: workspace,
-    input: fs.readFileSync(input),
+    input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
   });
 

@@ -26,8 +26,7 @@ function compilePrompt(stage, context = {}) {
   let template = fs.readFileSync(path.join(PROMPTS_DIR, `${stage}.md`), "utf-8");
 
   template = template.replaceAll("{{SKILLS}}",    compileSkills(stage));
-  if (template.includes("{{DEBUGGING}}"))
-    template = template.replaceAll("{{DEBUGGING}}", load("DEBUGGING.md"));
+  template = template.replaceAll("{{DEBUGGING}}", load("DEBUGGING.md"));
   template = template.replaceAll("{{FAILURE}}",   context.failure  || "");
   template = template.replaceAll("{{ANALYSIS}}",  context.analysis ? JSON.stringify(context.analysis, null, 2) : "");
   template = template.replaceAll("{{PLAN}}",      context.plan     || "");

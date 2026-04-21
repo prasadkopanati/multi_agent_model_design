@@ -160,3 +160,69 @@ Polish and correctness issues that are unlikely to cause failures in practice bu
   - The `existsSync` check is redundant; the `try/catch` already handles both the missing-file and read-error cases.
   - Fix: remove the `existsSync` guard and rely on the catch block alone.
   - File: `orchestrator/orchestrator.js:26-30`
+
+---
+
+## Critical (round 3)
+
+- [x] **Both runners echo the compiled prompt as the agent's user-turn message**
+  - `runClaude` and `runOpenCode` call `fs.readFileSync(input)` twice: once for `--system` (the system prompt) and again for `input:` (stdin, which `claude -p` / `opencode -p` treat as the user turn). The agent receives its own instruction set as its "question", with no actual task payload. There is no separate user-turn content; every invocation is a no-op prompt-echo.
+  - Fix: pass a concise user-turn message as stdin — e.g. `"Execute the stage instructions above."` — or construct a separate task message and pipe that as stdin while keeping the compiled prompt only in `--system`.
+  - Files: `agent-cli/runners/claude.js:14`, `agent-cli/runners/opencode.js:13`
+
+- [x] **`artifacts/output/` is never created — first pipeline run throws `ENOENT`**
+  - `orchestrator.js` creates `COMPILED_DIR` with `mkdirSync` before writing the compiled prompt (line 36) but never creates `OUTPUT_DIR`. The runners (`claude.js:21`, `opencode.js:20`) call `fs.writeFileSync(output, ...)` into that directory, which throws `ENOENT` on a fresh clone. The directory is `.gitignore`-d and will not exist.
+  - Fix: add `fs.mkdirSync(OUTPUT_DIR, { recursive: true })` alongside the `COMPILED_DIR` mkdir in `runStage`.
+  - Files: `orchestrator/orchestrator.js:36`, `agent-cli/runners/claude.js:21`, `agent-cli/runners/opencode.js:20`
+
+- [x] **`process.exit(1)` inside `analyzeFailure`'s try-catch terminates the process unexpectedly**
+  - `analyzeFailure` wraps `runStage("failure", ...)` in a try-catch with the comment "a failure here must not block the retry." But when `runStage` catches its own error, it calls `retryStage("failure", ...)`, which calls `process.exit(1)` once the "failure" stage accumulates `retry_limit` failures. `process.exit` is not catchable; the try-catch is bypassed and the process terminates with a misleading "Escalating to human" message attributed to the `failure` stage, not the original failing stage.
+  - Fix: give `analyzeFailure` a separate, non-retrying invocation path for the failure-analysis agent — a thin direct `spawnSync` call that throws on failure rather than routing through `runStage` / `retryStage`.
+  - File: `orchestrator/retry.js:44–65`
+
+---
+
+## High (round 3)
+
+- [x] **Off-by-one: `retry_limit: 3` allows 2 retries, not 3**
+  - `shouldEscalate` triggers when `stageFailures >= retry_limit`. With `retry_limit: 3`, escalation fires after the 3rd failure (1 original attempt + 2 retries). CLAUDE.md documents "Can retry up to 3 times," implying 4 total attempts. The condition should be `> retry_limit` or the field should be renamed `max_attempts` and documented accordingly.
+  - File: `orchestrator/retry.js:27`
+
+- [x] **`analyzeFailure` happy-path test writes fixture to real `artifacts/output/`**
+  - `tests/retry.test.js:110–112` calls `fs.mkdirSync(OUTPUT_DIR, ...)` and `fs.writeFileSync(fixturePath, ...)` where `OUTPUT_DIR` resolves to the real `artifacts/output/` directory in the project. The test cleans the fixture file on exit but still creates the production directory as a side-effect and would corrupt an in-flight pipeline run if both execute simultaneously. Root cause: `OUTPUT_DIR` is a module-level constant with no injection point.
+  - Fix: add an `outputDir` parameter to `analyzeFailure` (matching the pattern already used for `failuresDir` in `captureFailure`) and pass a temp directory in tests.
+  - Files: `orchestrator/retry.js:5,46`, `tests/retry.test.js:94–121`
+
+- [x] **`tasks.json` state fields are never read or updated during pipeline execution**
+  - `current_stage`, `mode`, and `token_budget` are defined in `tasks.json` and documented in CLAUDE.md as active system state, but no code reads or writes them. `current_stage` never advances as stages complete; `mode` (normal vs YOLO) is never checked; `token_budget` is never decremented. An operator reading `tasks.json` mid-run gets a frozen, misleading view.
+  - Fix: update `current_stage` in `runPipeline` at each stage transition; implement mode checks (at minimum skip human prompts in YOLO mode); or remove the fields and update the docs to reflect actual scope.
+  - Files: `tasks.json`, `orchestrator/orchestrator.js`
+
+- [x] **`GITHUB_REPO_TEMPLATE.md` contains stale, insecure code examples**
+  - The template file embeds the original pre-fix code blocks: `execSync` with template-literal interpolation (shell injection), relative paths, the global failure counter, and the circular import. These patterns were the bugs fixed in rounds 1 and 2. A contributor copying from this file would reintroduce the same vulnerabilities.
+  - Fix: update the embedded code blocks to match the current implementation, or replace them with pseudocode and a pointer to the real source files.
+  - File: `GITHUB_REPO_TEMPLATE.md`
+
+---
+
+## Low (round 3)
+
+- [ ] **`--system` receives the full compiled prompt as a CLI argument — risks `ARG_MAX` truncation**
+  - Both runners pass `systemPrompt` (the full compiled prompt, including all injected skills) as the value of `--system` in a `spawnSync` args array. `execve` has an `ARG_MAX` limit (~256 KB on macOS, ~2 MB on Linux). Prompts with multiple injected skill files can exceed this; the OS returns `E2BIG` or silently truncates, producing a broken invocation with no clear error.
+  - Fix: write the system prompt to a temp file and pass `--system-file <path>` if the CLI supports it, or find another mechanism to pass large system prompts (e.g. as the first user-turn block).
+  - Files: `agent-cli/runners/claude.js:11`, `agent-cli/runners/opencode.js:10`
+
+- [ ] **`promptCompiler.js` inconsistently guards `{{DEBUGGING}}` substitution**
+  - Line 29 checks `template.includes("{{DEBUGGING}}")` before calling `replaceAll`, but none of the other eight placeholders have this guard. `replaceAll` on a non-matching string is a safe no-op. The inconsistency implies a semantic distinction that doesn't exist and will confuse future maintainers.
+  - Fix: remove the `includes` guard and call `replaceAll` unconditionally, matching the pattern for all other placeholders.
+  - File: `orchestrator/promptCompiler.js:29–30`
+
+- [ ] **`agent-cli` fallback default paths are relative to CWD**
+  - `agent-cli/agent-cli.js:25–26` defines fallback `--input` / `--output` paths as bare relative strings (`artifacts/compiled/${stage}.md`, `artifacts/output/${stage}.json`). Since `orchestrator.js` always passes absolute paths, these fallbacks are only reachable via direct `agent-cli` invocation from an arbitrary directory, where they silently resolve to the wrong location.
+  - Fix: make `--input` and `--output` required arguments (remove the fallbacks), or resolve them with `path.resolve` from a known anchor.
+  - File: `agent-cli/agent-cli.js:25–26`
+
+- [ ] **No stage logging in `orchestrator.js` before agent dispatch**
+  - `runStage` calls `spawnSync("agent-cli", ...)` with no prior log line. Pipeline progress is invisible until the agent exits. A single `console.log` before dispatch would make it trivial to identify which stage a hung or slow run is executing.
+  - Fix: add `console.log(\`▶ Running stage: ${stage} [${agent}]\`)` before the `spawnSync` call.
+  - File: `orchestrator/orchestrator.js:43`

@@ -3,6 +3,7 @@
 const { parseArgs } = require("node:util");
 const { runClaude } = require("./runners/claude");
 const { runOpenCode } = require("./runners/opencode");
+const { runGemini } = require("./runners/gemini");
 
 const { values: args } = parseArgs({
   options: {
@@ -30,6 +31,8 @@ function main() {
       runClaude(stage, input || defaultInput, output || defaultOutput, workspace);
     } else if (agent === "opencode") {
       runOpenCode(stage, input || defaultInput, output || defaultOutput, workspace);
+    } else if (agent === "gemini") {
+      runGemini(stage, input || defaultInput, output || defaultOutput, workspace);
     } else {
       console.error(`Unknown agent: ${agent}`);
       process.exit(1);

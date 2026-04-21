@@ -94,19 +94,25 @@ agentic-coding-template/
 
 ```js id="fail_capture"
 const fs = require("fs");
+const path = require("path");
 
-function captureFailure(stage, error, workspace) {
+const FAILURES_DIR = path.join(__dirname, "..", "artifacts", "failures");
+
+function captureFailure(stage, error, workspace, failuresDir = FAILURES_DIR) {
+  const ts = Date.now();
+
   const failure = {
     stage,
     error: error.toString(),
-    timestamp: Date.now(),
-    workspace
+    timestamp: ts,
+    workspace,
   };
 
-  const path = `artifacts/failures/${stage}-${Date.now()}.json`;
-  fs.writeFileSync(path, JSON.stringify(failure, null, 2));
+  fs.mkdirSync(failuresDir, { recursive: true });
+  const filePath = path.join(failuresDir, `${stage}-${ts}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(failure, null, 2));
 
-  return { failure, path };
+  return { failure, path: filePath };
 }
 
 module.exports = { captureFailure };
@@ -116,24 +122,30 @@ module.exports = { captureFailure };
 
 # 🧠 4. Structured Failure Analysis (Claude Controller)
 
-## `agent-cli/runners/claude.js` (failure mode included)
+## `agent-cli/runners/claude.js`
 
 ```js id="claude_fail"
-const { execSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 
-function runClaude(stage, input, output) {
-  const prompt = fs.readFileSync(`prompts/${stage}.md`, "utf-8");
+function runClaude(stage, input, output, workspace) {
+  const systemPrompt = fs.readFileSync(input, "utf-8");
 
-  const cmd = `
-    claude -p \
-      --model sonnet-4.5 \
-      --output-format json \
-      --system "${prompt.replace(/"/g, '\\"')}" \
-      < ${input} > ${output}
-  `;
+  const result = spawnSync("claude", [
+    "-p",
+    "--model", "sonnet-4.5",
+    "--output-format", "json",
+    "--system", systemPrompt,
+  ], {
+    cwd: workspace,
+    input: "Execute the stage instructions.",
+    stdio: ["pipe", "pipe", "inherit"],
+  });
 
-  execSync(cmd, { stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`claude exited with status ${result.status}`);
+
+  fs.writeFileSync(output, result.stdout);
 }
 
 module.exports = { runClaude };
@@ -174,36 +186,65 @@ Analyze failure logs and return STRICT JSON:
 
 ```js id="retry_engine"
 const fs = require("fs");
-const { runStage } = require("./orchestrator");
+const path = require("path");
+
+const TASKS_FILE = path.join(__dirname, "..", "tasks.json");
+const OUTPUT_DIR  = path.join(__dirname, "..", "artifacts", "output");
 
 function updateTaskFailure(stage, failure) {
-  const task = JSON.parse(fs.readFileSync("tasks.json"));
+  const task = JSON.parse(fs.readFileSync(TASKS_FILE));
 
-  task.failure_state.count += 1;
+  task.failure_state.count += 1; // observability counter; not used for escalation decisions
   task.failure_state.last_stage = stage;
   task.failure_state.last_error = failure;
 
   task.failure_state.history.push({
     stage,
     error: failure.error,
-    time: Date.now()
+    time: Date.now(),
   });
 
-  fs.writeFileSync("tasks.json", JSON.stringify(task, null, 2));
+  fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
 
   return task;
 }
 
-function shouldEscalate(task) {
-  return task.failure_state.count >= task.retry_limit;
+function shouldEscalate(task, stage) {
+  const stageFailures = task.failure_state.history.filter(h => h.stage === stage).length;
+  return stageFailures > task.retry_limit;
 }
 
-function retryStage(stage, workspace, failure) {
+function isValidAnalysis(obj) {
+  return (
+    obj !== null &&
+    typeof obj === "object" &&
+    typeof obj.root_cause === "string" &&
+    typeof obj.fix_strategy === "string" &&
+    Array.isArray(obj.affected_files) &&
+    typeof obj.confidence === "number"
+  );
+}
+
+function analyzeFailure(workspace, failure, executeDirect, outputDir = OUTPUT_DIR) {
+  try {
+    executeDirect("failure", workspace, { failure: failure.error });
+    const outputPath = path.join(outputDir, "failure.json");
+    if (fs.existsSync(outputPath)) {
+      const parsed = JSON.parse(fs.readFileSync(outputPath, "utf-8"));
+      return isValidAnalysis(parsed) ? parsed : null;
+    }
+  } catch {
+    // analysis is best-effort; a failure here must not block the retry
+  }
+  return null;
+}
+
+function retryStage(stage, workspace, failure, runStage, executeDirect) {
   const task = updateTaskFailure(stage, failure);
 
-  if (shouldEscalate(task)) {
+  if (shouldEscalate(task, stage)) {
     task.human_required = true;
-    fs.writeFileSync("tasks.json", JSON.stringify(task, null, 2));
+    fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
 
     console.log("🚨 Escalating to human due to repeated failures");
     process.exit(1);
@@ -211,12 +252,15 @@ function retryStage(stage, workspace, failure) {
 
   console.log("🔁 Retrying stage:", stage);
 
-  return runStage(stage, workspace, {
-    failure: failure.error
-  });
+  const analysis = analyzeFailure(workspace, failure, executeDirect);
+  const context = analysis
+    ? { failure: failure.error, analysis }
+    : { failure: failure.error };
+
+  return runStage(stage, workspace, context);
 }
 
-module.exports = { retryStage };
+module.exports = { retryStage, shouldEscalate, analyzeFailure };
 ```
 
 ---
@@ -226,45 +270,95 @@ module.exports = { retryStage };
 ## `orchestrator/orchestrator.js`
 
 ```js id="orch_final"
-const { execSync } = require("child_process");
+const { spawnSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 const { compilePrompt } = require("./promptCompiler");
 const { captureFailure } = require("./failure");
 const { retryStage } = require("./retry");
-const fs = require("fs");
 
-const AGENTS = {
-  spec: "claude",
-  plan: "claude",
+const COMPILED_DIR = path.join(__dirname, "..", "artifacts", "compiled");
+const OUTPUT_DIR   = path.join(__dirname, "..", "artifacts", "output");
+const TASKS_FILE   = path.join(__dirname, "..", "tasks.json");
+
+const DEFAULT_AGENTS = {
+  spec:   "claude",
+  plan:   "claude",
   review: "claude",
-  build: "opencode",
-  test: "opencode"
+  build:  "opencode",
+  test:   "opencode",
 };
 
-function runStage(stage, workspace, context = {}, retry = 0) {
+function getAgentForStage(stage) {
+  const envVar = `AGENT_${stage.toUpperCase()}`;
+  return process.env[envVar] || DEFAULT_AGENTS[stage];
+}
+
+function updateCurrentStage(stage) {
   try {
-    const prompt = compilePrompt(stage, context);
-
-    const inputFile = `artifacts/compiled/${stage}.md`;
-    fs.writeFileSync(inputFile, prompt);
-
-    const agent = AGENTS[stage];
-
-    execSync(
-      `agent-cli --agent ${agent} --stage ${stage} --input ${inputFile} --workspace ${workspace}`,
-      { stdio: "inherit" }
-    );
-
-  } catch (err) {
-    const { failure } = captureFailure(stage, err, workspace);
-    return retryStage(stage, workspace, failure);
+    const task = JSON.parse(fs.readFileSync(TASKS_FILE, "utf-8"));
+    task.current_stage = stage;
+    fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
+  } catch {
+    // non-fatal; tasks.json observability is best-effort
   }
 }
 
-function runPipeline(workspace) {
-  const stages = ["spec", "plan", "build", "test", "review"];
+function readOutputArtifact(stage) {
+  try {
+    return fs.readFileSync(path.join(OUTPUT_DIR, `${stage}.json`), "utf-8");
+  } catch {
+    return null;
+  }
+}
 
-  for (const stage of stages) {
-    runStage(stage, workspace);
+function executeStage(stage, workspace, context = {}) {
+  const prompt = compilePrompt(stage, context);
+
+  fs.mkdirSync(COMPILED_DIR, { recursive: true });
+  fs.mkdirSync(OUTPUT_DIR,   { recursive: true });
+  const inputFile  = path.join(COMPILED_DIR, `${stage}.md`);
+  fs.writeFileSync(inputFile, prompt);
+
+  const agent      = getAgentForStage(stage);
+  const outputFile = path.join(OUTPUT_DIR, `${stage}.json`);
+  const result = spawnSync(
+    "agent-cli",
+    ["--agent", agent, "--stage", stage, "--input", inputFile, "--output", outputFile, "--workspace", workspace],
+    { stdio: "inherit" }
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`agent-cli exited with status ${result.status}`);
+}
+
+function runStage(stage, workspace, context = {}) {
+  try {
+    executeStage(stage, workspace, context);
+  } catch (err) {
+    const { failure } = captureFailure(stage, err, workspace);
+    return retryStage(stage, workspace, failure, runStage, executeStage);
+  }
+}
+
+const PIPELINE = [
+  { stage: "spec",   contextKey: "spec"  },
+  { stage: "plan",   contextKey: "plan"  },
+  { stage: "build",  contextKey: "build" },
+  { stage: "test",   contextKey: "test"  },
+  { stage: "review", contextKey: null    },
+];
+
+function runPipeline(workspace) {
+  let context = {};
+
+  for (const { stage, contextKey } of PIPELINE) {
+    updateCurrentStage(stage);
+    runStage(stage, workspace, context);
+
+    if (contextKey) {
+      const output = readOutputArtifact(stage);
+      if (output) context = { ...context, [contextKey]: output };
+    }
   }
 
   console.log("✅ Pipeline complete");
@@ -281,25 +375,41 @@ module.exports = { runStage, runPipeline };
 
 ```js id="compiler_final"
 const fs = require("fs");
+const path = require("path");
+
+const SKILLS_DIR  = path.join(__dirname, "..", "prompts", "skills");
+const PROMPTS_DIR = path.join(__dirname, "..", "prompts");
 
 function load(file) {
-  return fs.readFileSync(`prompts/skills/${file}`, "utf-8");
+  return fs.readFileSync(path.join(SKILLS_DIR, file), "utf-8");
 }
 
-function compileSkills() {
-  return [
-    load("SKILLS.md"),
-    load("DEBUGGING.md"),
-    load("GIT.md")
-  ].join("\n\n");
+const STAGE_SKILLS = {
+  spec:    ["SKILLS.md", "SPEC_DRIVEN.md"],
+  plan:    ["SKILLS.md", "PLANNING.md"],
+  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md"],
+  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md"],
+  review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md"],
+  failure: ["SKILLS.md", "DEBUGGING.md"],
+};
+
+function compileSkills(stage) {
+  const skillFiles = STAGE_SKILLS[stage] || ["SKILLS.md"];
+  return skillFiles.map(load).join("\n\n");
 }
 
 function compilePrompt(stage, context = {}) {
-  let template = fs.readFileSync(`prompts/${stage}.md`, "utf-8");
+  let template = fs.readFileSync(path.join(PROMPTS_DIR, `${stage}.md`), "utf-8");
 
-  template = template.replace("{{SKILLS}}", compileSkills());
-  template = template.replace("{{FAILURE}}", context.failure || "");
-  template = template.replace("{{PLAN}}", context.plan || "");
+  template = template.replaceAll("{{SKILLS}}",    compileSkills(stage));
+  if (template.includes("{{DEBUGGING}}"))
+    template = template.replaceAll("{{DEBUGGING}}", load("DEBUGGING.md"));
+  template = template.replaceAll("{{FAILURE}}",   context.failure  || "");
+  template = template.replaceAll("{{ANALYSIS}}",  context.analysis ? JSON.stringify(context.analysis, null, 2) : "");
+  template = template.replaceAll("{{PLAN}}",      context.plan     || "");
+  template = template.replaceAll("{{SPEC}}",      context.spec     || "");
+  template = template.replaceAll("{{BUILD}}",     context.build    || "");
+  template = template.replaceAll("{{TEST}}",      context.test     || "");
 
   return template;
 }
@@ -314,7 +424,9 @@ module.exports = { compilePrompt };
 Triggered when:
 
 ```js id="human_gate"
-if (task.failure_state.count >= task.retry_limit) {
+// Escalation is per-stage: count how many times *this* stage has failed.
+const stageFailures = task.failure_state.history.filter(h => h.stage === stage).length;
+if (stageFailures > task.retry_limit) {
   task.human_required = true;
 }
 ```

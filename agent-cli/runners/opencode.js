@@ -2,17 +2,19 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 
 function runOpenCode(stage, input, output, workspace) {
-  const systemPrompt = fs.readFileSync(input, "utf-8");
+  const prompt = fs.readFileSync(input, "utf-8");
 
   const result = spawnSync("opencode", [
-    "-p",
-    "--model", "qwen3.5-27b",
-    "--system", systemPrompt,
+    "run",
+    "--dangerously-skip-permissions",
+    "-m", "Qwen3dot5-local/Qwen3dot5-27B-Opus46",
+    "Execute the stage instructions."
   ], {
     cwd: workspace,
-    input: fs.readFileSync(input),
+    input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
   });
+
 
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`opencode exited with status ${result.status}`);

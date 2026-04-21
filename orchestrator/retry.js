@@ -24,7 +24,7 @@ function updateTaskFailure(stage, failure) {
 
 function shouldEscalate(task, stage) {
   const stageFailures = task.failure_state.history.filter(h => h.stage === stage).length;
-  return stageFailures >= task.retry_limit;
+  return stageFailures > task.retry_limit;
 }
 
 function isValidAnalysis(obj) {
@@ -40,10 +40,12 @@ function isValidAnalysis(obj) {
 
 // Runs the failure-analysis agent and returns its structured JSON output,
 // or null if analysis itself fails, produces unparseable output, or has wrong shape.
-function analyzeFailure(workspace, failure, runStage) {
+// executeDirect must be a non-retrying runner so a failure here cannot call process.exit.
+// outputDir is injected for testability; defaults to the real artifacts/output directory.
+function analyzeFailure(workspace, failure, executeDirect, outputDir = OUTPUT_DIR) {
   try {
-    runStage("failure", workspace, { failure: failure.error });
-    const outputPath = path.join(OUTPUT_DIR, "failure.json");
+    executeDirect("failure", workspace, { failure: failure.error });
+    const outputPath = path.join(outputDir, "failure.json");
     if (fs.existsSync(outputPath)) {
       const parsed = JSON.parse(fs.readFileSync(outputPath, "utf-8"));
       return isValidAnalysis(parsed) ? parsed : null;
@@ -54,7 +56,7 @@ function analyzeFailure(workspace, failure, runStage) {
   return null;
 }
 
-function retryStage(stage, workspace, failure, runStage) {
+function retryStage(stage, workspace, failure, runStage, executeDirect) {
   const task = updateTaskFailure(stage, failure);
 
   if (shouldEscalate(task, stage)) {
@@ -67,7 +69,7 @@ function retryStage(stage, workspace, failure, runStage) {
 
   console.log("🔁 Retrying stage:", stage);
 
-  const analysis = analyzeFailure(workspace, failure, runStage);
+  const analysis = analyzeFailure(workspace, failure, executeDirect);
   const context = analysis
     ? { failure: failure.error, analysis }
     : { failure: failure.error };
