@@ -12,7 +12,12 @@ Pick the next pending task from the plan. For each task:
 4. Implement the minimum code to pass the test (GREEN)
 5. Run the full test suite to check for regressions
 6. Run the build to verify compilation
-7. Commit with a descriptive message
-8. Mark the task complete and move to the next one
+7. For any HTML output, run static validation:
+   ```
+   npx htmlhint **/*.html
+   ```
+   Fix all reported errors before proceeding. Do NOT check for `html5validator` or fall back to manual browser verification.
+8. Commit with a descriptive message
+9. Mark the task complete and move to the next one
 
 If any step fails, follow the agent-skills:debugging-and-error-recovery skill.

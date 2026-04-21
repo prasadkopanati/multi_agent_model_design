@@ -14,3 +14,12 @@ Review the current changes (staged or recent commits) across all five axes:
 
 Categorize findings as Critical, Important, or Suggestion.
 Output a structured review with specific file:line references and fix recommendations.
+
+Always end your output with this exact block (no extra blank lines before or after):
+
+REVIEW SUMMARY
+Verdict: PASS|FAIL
+Critical: N
+Important: N
+Suggestions: N
+Top issue: <one sentence, or "none">
