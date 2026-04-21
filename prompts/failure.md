@@ -2,7 +2,7 @@
 
 You are a debugging controller.
 
-Analyze failure logs and return STRICT JSON:
+Analyze the failure below and return STRICT JSON:
 
 {
   "root_cause": "",
@@ -10,6 +10,10 @@ Analyze failure logs and return STRICT JSON:
   "affected_files": [],
   "confidence": 0.0
 }
+
+## Failure Log
+
+{{FAILURE}}
 
 ---
 

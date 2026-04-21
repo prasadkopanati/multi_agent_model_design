@@ -1,18 +1,24 @@
-const { execSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 
-function runClaude(stage, input, output) {
-  const prompt = fs.readFileSync(`prompts/${stage}.md`, "utf-8");
+function runClaude(stage, input, output, workspace) {
+  const systemPrompt = fs.readFileSync(input, "utf-8");
 
-  const cmd = `
-    claude -p \
-      --model sonnet-4.5 \
-      --output-format json \
-      --system "${prompt.replace(/"/g, '\\"')}" \
-      < ${input} > ${output}
-  `;
+  const result = spawnSync("claude", [
+    "-p",
+    "--model", "sonnet-4.5",
+    "--output-format", "json",
+    "--system", systemPrompt,
+  ], {
+    cwd: workspace,
+    input: fs.readFileSync(input),
+    stdio: ["pipe", "pipe", "inherit"],
+  });
 
-  execSync(cmd, { stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`claude exited with status ${result.status}`);
+
+  fs.writeFileSync(output, result.stdout);
 }
 
 module.exports = { runClaude };

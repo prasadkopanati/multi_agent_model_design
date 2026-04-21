@@ -1,28 +1,39 @@
 const fs = require("fs");
+const path = require("path");
+
+const SKILLS_DIR = path.join(__dirname, "..", "prompts", "skills");
+const PROMPTS_DIR = path.join(__dirname, "..", "prompts");
 
 function load(file) {
-  return fs.readFileSync(`prompts/skills/${file}`, "utf-8");
+  return fs.readFileSync(path.join(SKILLS_DIR, file), "utf-8");
 }
 
-function compileSkills(stage) {
-  const stageSkills = {
-    spec: ["SKILLS.md", "SPEC_DRIVEN.md"],
-    plan: ["SKILLS.md", "PLANNING.md"],
-    build: ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md"],
-    test: ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md"],
-    review: ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md"]
-  };
+const STAGE_SKILLS = {
+  spec:    ["SKILLS.md", "SPEC_DRIVEN.md"],
+  plan:    ["SKILLS.md", "PLANNING.md"],
+  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md"],
+  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md"],
+  review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md"],
+  failure: ["SKILLS.md", "DEBUGGING.md"],
+};
 
-  const skillFiles = stageSkills[stage] || ["SKILLS.md"];
+function compileSkills(stage) {
+  const skillFiles = STAGE_SKILLS[stage] || ["SKILLS.md"];
   return skillFiles.map(load).join("\n\n");
 }
 
 function compilePrompt(stage, context = {}) {
-  let template = fs.readFileSync(`prompts/${stage}.md`, "utf-8");
+  let template = fs.readFileSync(path.join(PROMPTS_DIR, `${stage}.md`), "utf-8");
 
-  template = template.replace("{{SKILLS}}", compileSkills(stage));
-  template = template.replace("{{FAILURE}}", context.failure || "");
-  template = template.replace("{{PLAN}}", context.plan || "");
+  template = template.replaceAll("{{SKILLS}}",    compileSkills(stage));
+  if (template.includes("{{DEBUGGING}}"))
+    template = template.replaceAll("{{DEBUGGING}}", load("DEBUGGING.md"));
+  template = template.replaceAll("{{FAILURE}}",   context.failure  || "");
+  template = template.replaceAll("{{ANALYSIS}}",  context.analysis ? JSON.stringify(context.analysis, null, 2) : "");
+  template = template.replaceAll("{{PLAN}}",      context.plan     || "");
+  template = template.replaceAll("{{SPEC}}",      context.spec     || "");
+  template = template.replaceAll("{{BUILD}}",     context.build    || "");
+  template = template.replaceAll("{{TEST}}",      context.test     || "");
 
   return template;
 }

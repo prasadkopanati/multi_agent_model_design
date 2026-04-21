@@ -4,7 +4,8 @@
   "description": "A deterministic, multi-stage coding workflow powered by two CLI agents",
   "main": "orchestrator/orchestrator.js",
   "scripts": {
-    "start": "node orchestrator/orchestrator.js"
+    "start": "node orchestrator/orchestrator.js --workspace .",
+    "test": "node --test tests/*.test.js"
   },
   "keywords": ["agent", "orchestrator", "multi-agent"],
   "license": "MIT"

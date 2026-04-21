@@ -1,17 +1,23 @@
 const fs = require("fs");
+const path = require("path");
 
-function captureFailure(stage, error, workspace) {
+const FAILURES_DIR = path.join(__dirname, "..", "artifacts", "failures");
+
+function captureFailure(stage, error, workspace, failuresDir = FAILURES_DIR) {
+  const ts = Date.now();
+
   const failure = {
     stage,
     error: error.toString(),
-    timestamp: Date.now(),
-    workspace
+    timestamp: ts,
+    workspace,
   };
 
-  const path = `artifacts/failures/${stage}-${Date.now()}.json`;
-  fs.writeFileSync(path, JSON.stringify(failure, null, 2));
+  fs.mkdirSync(failuresDir, { recursive: true });
+  const filePath = path.join(failuresDir, `${stage}-${ts}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(failure, null, 2));
 
-  return { failure, path };
+  return { failure, path: filePath };
 }
 
 module.exports = { captureFailure };
