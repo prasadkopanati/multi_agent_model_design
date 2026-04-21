@@ -1,8 +1,12 @@
 {
-  "name": "agentic-coding-system",
+  "name": "agenticspiq",
   "version": "1.0.0",
   "description": "A deterministic, multi-stage coding workflow powered by two CLI agents",
   "main": "orchestrator/orchestrator.js",
+  "bin": {
+    "agent-cli": "./agent-cli/agent-cli.js",
+    "agenticspiq": "./bin/agenticspiq.js"
+  },
   "scripts": {
     "start": "node orchestrator/orchestrator.js --workspace .",
     "test": "node --test tests/*.test.js"
