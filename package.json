@@ -1,0 +1,11 @@
+{
+  "name": "agentic-coding-system",
+  "version": "1.0.0",
+  "description": "A deterministic, multi-stage coding workflow powered by two CLI agents",
+  "main": "orchestrator/orchestrator.js",
+  "scripts": {
+    "start": "node orchestrator/orchestrator.js"
+  },
+  "keywords": ["agent", "orchestrator", "multi-agent"],
+  "license": "MIT"
+}

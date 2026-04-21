@@ -64,13 +64,21 @@ orchestrator.js
 
 ```
 agentic-system/
-├── orchestrator/
-├── agent-cli/
-├── prompts/
-├── artifacts/
-├── worktrees/
-├── repo/
-├── tasks.json
+├── orchestrator/        # State machine, failure capture, retry logic
+├── agent-cli/           # CLI entry point and agent runners
+├── prompts/             # Stage prompts and skills modules
+│   ├── *.md            # Stage templates (spec, plan, build, test, review)
+│   └── skills/         # Reusable skill modules
+├── commands/            # Command definitions with skill mappings
+├── skills/              # Detailed skill documentation
+├── artifacts/           # Generated outputs
+│   ├── compiled/       # Compiled prompts
+│   ├── failures/       # Failure records
+│   └── logs/           # Execution logs
+├── worktrees/          # Git worktrees for isolation
+├── repo/               # Working repository
+├── tasks.json          # State management
+├── .env.example        # Environment variable template
 └── README.md
 ```
 
@@ -138,6 +146,72 @@ This is injected into the next `/build` step.
 * Max retries per stage: `3`
 * Max fix loops: `3`
 * Same failure twice → escalate
+
+---
+
+## 🎯 Skills & Commands
+
+### Command-Skill Mapping
+
+Each command invokes specific skills as defined in `commands/`:
+
+| Command | Primary Skill(s) | Additional Skills |
+|---------|------------------|--------------------|
+| `/spec` | spec-driven-development | — |
+| `/plan` | planning-and-task-breakdown | — |
+| `/build` | incremental-implementation, test-driven-development | debugging-and-error-recovery (on failure) |
+| `/test` | test-driven-development | browser-testing-with-devtools (browser issues) |
+| `/review` | code-review-and-quality | security-and-hardening, performance-optimization |
+
+### Available Skills
+
+Skills are documented in `skills/` directory:
+
+**Core Workflow:**
+- spec-driven-development
+- planning-and-task-breakdown
+- incremental-implementation
+- test-driven-development
+- debugging-and-error-recovery
+- code-review-and-quality
+
+**Specialized:**
+- frontend-ui-engineering
+- api-and-interface-design
+- security-and-hardening
+- performance-optimization
+- browser-testing-with-devtools
+- ci-cd-and-automation
+- git-workflow-and-versioning
+- documentation-and-adrs
+- shipping-and-launch
+- source-driven-development
+- context-engineering
+
+---
+
+## ⚙️ Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# Agent Configuration
+# Set custom CLI agents for each stage (defaults shown)
+AGENT_SPEC=claude        # Controller: spec generation
+AGENT_PLAN=claude        # Controller: task planning
+AGENT_BUILD=opencode     # Executor: code implementation
+AGENT_TEST=opencode      # Executor: test execution
+AGENT_REVIEW=claude      # Controller: code review
+```
+
+**Usage:**
+```bash
+# Use defaults (from .env or hardcoded)
+node orchestrator/orchestrator.js
+
+# Override specific agent
+AGENT_BUILD=my-custom-agent node orchestrator/orchestrator.js
+```
 
 ---
 
