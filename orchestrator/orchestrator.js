@@ -1,6 +1,6 @@
-require("dotenv").config();
-const { spawnSync } = require("child_process");
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const { compilePrompt } = require("./promptCompiler");
 const { captureFailure } = require("./failure");
@@ -74,6 +74,36 @@ function runStage(stage, workspace, context = {}) {
   }
 }
 
+function extractText(rawOutput) {
+  try {
+    const parsed = JSON.parse(rawOutput);
+    return parsed.result ?? parsed.content ?? parsed.text ?? rawOutput;
+  } catch {
+    return rawOutput;
+  }
+}
+
+function printReviewSummary(rawOutput) {
+  try {
+    const text = extractText(rawOutput);
+    const match = text.match(/REVIEW SUMMARY[\s\S]*$/m);
+    if (match) console.log("\n" + match[0].trim());
+  } catch {
+    // non-fatal; summary is best-effort
+  }
+}
+
+function writePlanArtifacts(workspace, rawOutput) {
+  try {
+    const text = extractText(rawOutput);
+    const tasksDir = path.join(workspace, "tasks");
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(path.join(tasksDir, "plan.md"), text);
+  } catch {
+    // non-fatal; executor will also attempt this directly
+  }
+}
+
 // Stage sequence and which output key each stage's artifact maps to for the next stage.
 const PIPELINE = [
   { stage: "spec",   contextKey: "spec"  },
@@ -83,16 +113,29 @@ const PIPELINE = [
   { stage: "review", contextKey: null    },
 ];
 
+function readRequest(workspace) {
+  const reqFile = path.join(workspace, "req.md");
+  if (!fs.existsSync(reqFile)) {
+    console.error(`Error: req.md not found in ${workspace}`);
+    console.error("Create req.md with your feature request before running agenticspiq.");
+    process.exit(1);
+  }
+  return fs.readFileSync(reqFile, "utf-8");
+}
+
 function runPipeline(workspace) {
-  let context = {};
+  const request = readRequest(workspace);
+  let context = { request };
 
   for (const { stage, contextKey } of PIPELINE) {
     updateCurrentStage(stage);
     runStage(stage, workspace, context);
 
-    if (contextKey) {
-      const output = readOutputArtifact(stage);
-      if (output) context = { ...context, [contextKey]: output };
+    const output = readOutputArtifact(stage);
+    if (output) {
+      if (stage === "plan")   writePlanArtifacts(workspace, output);
+      if (stage === "review") printReviewSummary(output);
+      if (contextKey) context = { ...context, [contextKey]: output };
     }
   }
 

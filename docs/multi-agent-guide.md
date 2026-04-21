@@ -172,18 +172,42 @@ AGENT_FAILURE=claude
 
 ### B. Per-Run User Inputs
 
-#### 1. Initial Prompt / Feature Request (Spec Stage)
+#### 1. Initial Prompt / Feature Request (`req.md`)
 
-The system starts with your feature request. Be prepared to provide:
+The system reads your feature request from `req.md` in the project root. `init-workspace.sh` creates a template automatically — fill it in before running `agenticspiq`.
 
-| Input | Description | Example |
-|-------|-------------|--------|
+```markdown
+# Feature Request
+
+## Objective
+What do you want to build?
+
+## Target Users
+Who will use this?
+
+## Core Features
+List the key functionality.
+
+## Acceptance Criteria
+How will you know it is done?
+
+## Tech Stack
+Preferred technologies.
+
+## Constraints
+Boundaries and limitations.
+```
+
+| Section | Description | Example |
+|---------|-------------|--------|
 | **Objective** | What you want to build | "A REST API for task management" |
 | **Target Users** | Who will use it | "Frontend developers integrating task features" |
 | **Core Features** | Key functionality | "CRUD operations, user authentication, task filtering" |
 | **Acceptance Criteria** | Definition of done | "API passes all integration tests" |
 | **Tech Stack** | Preferred technologies | "Node.js, Express, PostgreSQL" |
 | **Constraints** | Boundaries and limitations | "Must be serverless-compatible" |
+
+`agenticspiq` will exit with an error if `req.md` is missing.
 
 #### 2. Spec Review (After Spec Stage)
 

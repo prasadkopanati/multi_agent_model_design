@@ -27,6 +27,7 @@ function compilePrompt(stage, context = {}) {
 
   template = template.replaceAll("{{SKILLS}}",    compileSkills(stage));
   template = template.replaceAll("{{DEBUGGING}}", load("DEBUGGING.md"));
+  template = template.replaceAll("{{REQUEST}}",   context.request  || "");
   template = template.replaceAll("{{FAILURE}}",   context.failure  || "");
   template = template.replaceAll("{{ANALYSIS}}",  context.analysis ? JSON.stringify(context.analysis, null, 2) : "");
   template = template.replaceAll("{{PLAN}}",      context.plan     || "");

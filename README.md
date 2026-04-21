@@ -358,8 +358,15 @@ source ~/.zshrc   # or restart your terminal
 # 3. Link the package globally
 npm link
 
-# 4. Run from any workspace directory
+# 4. Initialise your workspace directory
 cd /your/project
+bash ~/.npm-global/lib/node_modules/agenticspiq/utils/init-workspace.sh
+# Creates required directories and a req.md template
+
+# 5. Fill in your feature request
+$EDITOR req.md
+
+# 6. Run
 agenticspiq
 ```
 
@@ -369,6 +376,22 @@ Pass it explicitly to override:
 ```bash
 agenticspiq --workspace /path/to/project
 ```
+
+#### Workspace structure created by `init-workspace.sh`
+
+```
+your-project/
+├── artifacts/
+│   ├── compiled/    # compiled stage prompts
+│   ├── failures/    # persisted failure records
+│   ├── logs/        # execution logs
+│   └── output/      # stage output artifacts
+├── tasks/           # plan and todo files
+├── worktrees/       # git worktrees for isolated execution
+└── repo/            # working repository clone
+```
+
+Run `init-workspace.sh` once per project before the first `agenticspiq` invocation. Re-running it is safe — existing directories and files are not modified.
 
 ### Option B: Local invocation
 
