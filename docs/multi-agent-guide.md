@@ -1,6 +1,6 @@
-# Multi-Agent Coding System: Usage Guide
+# agenticspiq: Usage Guide
 
-A comprehensive guide to using the agentic coding system that orchestrates multiple AI agents through a deterministic, multi-stage workflow.
+A comprehensive guide to using the `agenticspiq` system — an agentic coding workflow that orchestrates multiple AI agents through a deterministic, multi-stage pipeline.
 
 ---
 
@@ -90,19 +90,47 @@ claude login
 
 **Note:** Both CLIs are designed to be pre-configured. Authentication is handled by the CLI itself — no manual API key configuration required.
 
-### 2. Clone and Setup Project
+### 2. Clone and Install `agenticspiq`
 
 ```bash
-cd multi_agent_model_design
+git clone <repo-url> agenticspiq
+cd agenticspiq
 
 # Copy environment template
 cp .env.example .env
 
-# Install dependencies (if any)
+# Install dependencies
 npm install
 ```
 
-### 3. Verify Installation
+### 3. Build and Link the Global Package
+
+This makes the `agenticspiq` command available system-wide.
+
+```bash
+# Configure a user-local npm prefix (one-time, avoids needing sudo)
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+
+# Add to your shell profile (~/.zshrc or ~/.bashrc):
+export PATH="$HOME/.npm-global/bin:$PATH"
+
+# Reload your shell
+source ~/.zshrc   # or open a new terminal
+
+# Register the global command
+npm link
+```
+
+Verify the command is available:
+```bash
+which agenticspiq
+# → ~/.npm-global/bin/agenticspiq
+```
+
+> **Re-linking after updates:** If you pull new changes to the repo, run `npm link` again from the repo root to keep the symlink current. No reinstall needed — it links directly to your local clone.
+
+### 4. Verify Installation
 
 ```bash
 # Test Claude CLI
@@ -110,6 +138,9 @@ claude --version
 
 # Test OpenCode CLI
 opencode --version
+
+# Test agenticspiq
+agenticspiq --help   # will error on unknown flag, but confirms the binary resolves
 ```
 
 ---
@@ -127,6 +158,7 @@ opencode --version
 | `AGENT_BUILD` | Agent for build stage | `opencode` |
 | `AGENT_TEST` | Agent for test stage | `opencode` |
 | `AGENT_REVIEW` | Agent for review stage | `claude` |
+| `AGENT_FAILURE` | Agent for failure analysis | `claude` |
 
 ```bash
 # Example .env file
@@ -135,6 +167,7 @@ AGENT_PLAN=claude
 AGENT_BUILD=opencode
 AGENT_TEST=opencode
 AGENT_REVIEW=claude
+AGENT_FAILURE=claude
 ```
 
 ### B. Per-Run User Inputs
@@ -177,20 +210,34 @@ The executor may ask for clarification on:
 
 ## Running the Pipeline
 
-### Full Pipeline Execution
+### Global command (recommended)
+
+Once linked, run from any workspace directory:
 
 ```bash
-# Run the complete pipeline from spec to review
+cd /your/project
+agenticspiq
+```
+
+`--workspace` defaults to the current directory. Override explicitly:
+
+```bash
+agenticspiq --workspace /path/to/project
+```
+
+### Full Pipeline — local invocation
+
+```bash
+# From the repo root
 npm start
 
 # Or directly:
-node orchestrator/orchestrator.js runPipeline ./path/to/workspace
+node orchestrator/orchestrator.js --workspace ./path/to/workspace
 ```
 
 ### Single Stage Execution
 
 ```bash
-# Run a specific stage
 node orchestrator/orchestrator.js runStage <stage> <workspace>
 
 # Examples:
@@ -198,7 +245,7 @@ node orchestrator/orchestrator.js runStage spec ./myproject
 node orchestrator/orchestrator.js runStage build ./myproject
 ```
 
-### Direct CLI Invocation
+### Direct agent-cli Invocation
 
 ```bash
 # Run spec stage with Claude
@@ -435,6 +482,8 @@ git worktree remove worktrees/wt-<id>
 - [ ] Claude CLI installed (`npm install -g @anthropic-ai/claude-code`)
 - [ ] Claude CLI authenticated (`claude login`)
 - [ ] OpenCode CLI installed and pre-configured
+- [ ] `agenticspiq` linked globally (`npm link` from repo root)
+- [ ] `~/.npm-global/bin` on your `PATH`
 - [ ] `.env` file created from `.env.example`
 - [ ] Workspace directory ready
 - [ ] Feature request / user story prepared
@@ -452,19 +501,28 @@ git worktree remove worktrees/wt-<id>
 ## Quick Reference
 
 ```bash
-# Start fresh pipeline
-npm start
+# --- Setup (one-time) ---
+npm install
+mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global
+# add to ~/.zshrc: export PATH="$HOME/.npm-global/bin:$PATH"
+npm link
 
-# Run single stage
+# --- Run ---
+agenticspiq                                 # from any workspace dir
+agenticspiq --workspace /path/to/project   # explicit workspace
+
+# --- Local alternatives ---
+npm start                                   # workspace = .
+node orchestrator/orchestrator.js --workspace ./workspace
+
+# --- Single stage ---
 node orchestrator/orchestrator.js runStage <stage> ./workspace
 
-# Check state
+# --- Inspect state ---
 cat tasks.json
-
-# View failures
 ls -la artifacts/failures/
 
-# Reset for retry
+# --- Reset failure state ---
 node -e "require('fs').writeFileSync('tasks.json', JSON.stringify({...require('./tasks.json'), failure_state: {count: 0, last_stage: null, last_error: null, history: []}, human_required: false}, null, 2))"
 ```
 

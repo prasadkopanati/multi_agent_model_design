@@ -1,4 +1,4 @@
-# Agentic Coding System (Minimal, Scalable, CLI-Driven)
+# agenticspiq
 
 A deterministic, multi-stage coding workflow powered by two CLI agents:
 
@@ -202,6 +202,7 @@ AGENT_PLAN=claude        # Controller: task planning
 AGENT_BUILD=opencode     # Executor: code implementation
 AGENT_TEST=opencode      # Executor: test execution
 AGENT_REVIEW=claude      # Controller: code review
+AGENT_FAILURE=claude     # Controller: failure analysis
 ```
 
 **Usage:**
@@ -336,9 +337,45 @@ Not required for MVP, but critical at scale.
 
 ## 🚀 Running the System
 
+### Option A: Global CLI (recommended)
+
+Install `agenticspiq` once, then invoke it from any project directory:
+
+```bash
+# 1. Clone the repo and install dependencies
+git clone <repo-url> agenticspiq
+cd agenticspiq
+npm install
+
+# 2. Configure a user-local npm prefix (skip if already done)
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+
+# Add to your shell profile (~/.zshrc or ~/.bashrc):
+# export PATH="$HOME/.npm-global/bin:$PATH"
+source ~/.zshrc   # or restart your terminal
+
+# 3. Link the package globally
+npm link
+
+# 4. Run from any workspace directory
+cd /your/project
+agenticspiq
+```
+
+`agenticspiq` automatically sets `--workspace` to the current directory.
+Pass it explicitly to override:
+
+```bash
+agenticspiq --workspace /path/to/project
+```
+
+### Option B: Local invocation
+
 ```bash
 npm install
-node orchestrator/orchestrator.js
+npm start                                   # runs with --workspace .
+node orchestrator/orchestrator.js --workspace /path/to/project
 ```
 
 ---
