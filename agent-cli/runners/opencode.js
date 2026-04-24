@@ -1,5 +1,8 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
+
+const AGENTICSPIQ_BIN = path.join(__dirname, "..", "..", "node_modules", ".bin");
 
 function runOpenCode(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
@@ -7,12 +10,16 @@ function runOpenCode(stage, input, output, workspace) {
   const result = spawnSync("opencode", [
     "run",
     "--dangerously-skip-permissions",
-    "-m", "Qwen3dot5-local/Qwen3dot5-27B-Opus46",
+    "-m", "opencode/qwen3.5-plus",
     "Execute the stage instructions."
   ], {
     cwd: workspace,
     input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
+    env: {
+      ...process.env,
+      PATH: `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
 
