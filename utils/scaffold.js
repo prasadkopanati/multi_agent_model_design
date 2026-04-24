@@ -10,6 +10,15 @@ const SPIQ_DIRS = [
   "tasks",
 ];
 
+const INITIAL_TASKS = {
+  current_stage: null,
+  mode: "normal",
+  retry_limit: 3,
+  failure_state: { count: 0, last_stage: null, last_error: null, history: [] },
+  human_required: false,
+  token_budget: { total: 200000, used: 0 },
+};
+
 const REQ_TEMPLATE = `# Feature Request
 
 ## Objective
@@ -47,6 +56,11 @@ async function ensureDirs(workspace) {
     fs.mkdirSync(full, { recursive: true });
     const keep = path.join(full, ".gitkeep");
     if (!fs.existsSync(keep)) fs.writeFileSync(keep, "");
+  }
+
+  const tasksFile = path.join(spiqDir, "tasks.json");
+  if (!fs.existsSync(tasksFile)) {
+    fs.writeFileSync(tasksFile, JSON.stringify(INITIAL_TASKS, null, 2));
   }
 }
 
