@@ -2,6 +2,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const readline = require("readline");
 const { compilePrompt } = require("./promptCompiler");
 const { captureFailure } = require("./failure");
 const { retryStage } = require("./retry");
@@ -106,12 +107,30 @@ function writePlanArtifacts(workspace, rawOutput) {
 
 // Stage sequence and which output key each stage's artifact maps to for the next stage.
 const PIPELINE = [
-  { stage: "spec",   contextKey: "spec"  },
-  { stage: "plan",   contextKey: "plan"  },
-  { stage: "build",  contextKey: "build" },
-  { stage: "test",   contextKey: "test"  },
-  { stage: "review", contextKey: null    },
+  { stage: "spec",   contextKey: "spec",  requiresApproval: true  },
+  { stage: "plan",   contextKey: "plan",  requiresApproval: true  },
+  { stage: "build",  contextKey: "build", requiresApproval: false },
+  { stage: "test",   contextKey: "test",  requiresApproval: false },
+  { stage: "review", contextKey: null,    requiresApproval: false },
 ];
+
+const APPROVAL_ARTIFACTS = {
+  spec: "SPEC.md",
+  plan: "tasks/plan.md",
+};
+
+function promptApproval(stage, workspace) {
+  const artifact = APPROVAL_ARTIFACTS[stage];
+  const artifactPath = artifact ? path.join(workspace, artifact) : "(see artifacts/output/)";
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    console.log(`\n📋 ${stage.toUpperCase()} complete. Review: ${artifactPath}`);
+    rl.question(`Approve and continue to next stage? [y/N] `, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "y");
+    });
+  });
+}
 
 function readRequest(workspace) {
   const reqFile = path.join(workspace, "req.md");
@@ -123,11 +142,11 @@ function readRequest(workspace) {
   return fs.readFileSync(reqFile, "utf-8");
 }
 
-function runPipeline(workspace) {
+async function runPipeline(workspace) {
   const request = readRequest(workspace);
   let context = { request };
 
-  for (const { stage, contextKey } of PIPELINE) {
+  for (const { stage, contextKey, requiresApproval } of PIPELINE) {
     updateCurrentStage(stage);
     runStage(stage, workspace, context);
 
@@ -136,6 +155,14 @@ function runPipeline(workspace) {
       if (stage === "plan")   writePlanArtifacts(workspace, output);
       if (stage === "review") printReviewSummary(output);
       if (contextKey) context = { ...context, [contextKey]: output };
+    }
+
+    if (requiresApproval) {
+      const approved = await promptApproval(stage, workspace);
+      if (!approved) {
+        console.log(`⛔ Pipeline stopped at ${stage}. Revise req.md and re-run.`);
+        process.exit(0);
+      }
     }
   }
 
@@ -155,5 +182,8 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  runPipeline(values.workspace);
+  runPipeline(values.workspace).catch(err => {
+    console.error("Pipeline error:", err.message);
+    process.exit(1);
+  });
 }

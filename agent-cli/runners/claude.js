@@ -1,5 +1,8 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
+
+const AGENTICSPIQ_BIN = path.join(__dirname, "..", "..", "node_modules", ".bin");
 
 function runClaude(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
@@ -13,6 +16,10 @@ function runClaude(stage, input, output, workspace) {
     cwd: workspace,
     input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
+    env: {
+      ...process.env,
+      PATH: `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
   if (result.error) throw result.error;
