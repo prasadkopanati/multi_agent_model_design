@@ -1,11 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const TASKS_FILE = path.join(__dirname, "..", "tasks.json");
-const OUTPUT_DIR  = path.join(__dirname, "..", "artifacts", "output");
-
-function updateTaskFailure(stage, failure) {
-  const task = JSON.parse(fs.readFileSync(TASKS_FILE));
+function updateTaskFailure(stage, failure, tasksFile) {
+  const task = JSON.parse(fs.readFileSync(tasksFile));
 
   task.failure_state.count += 1; // observability counter; not used for escalation decisions
   task.failure_state.last_stage = stage;
@@ -17,7 +14,7 @@ function updateTaskFailure(stage, failure) {
     time: Date.now(),
   });
 
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
+  fs.writeFileSync(tasksFile, JSON.stringify(task, null, 2));
 
   return task;
 }
@@ -41,8 +38,7 @@ function isValidAnalysis(obj) {
 // Runs the failure-analysis agent and returns its structured JSON output,
 // or null if analysis itself fails, produces unparseable output, or has wrong shape.
 // executeDirect must be a non-retrying runner so a failure here cannot call process.exit.
-// outputDir is injected for testability; defaults to the real artifacts/output directory.
-function analyzeFailure(workspace, failure, executeDirect, outputDir = OUTPUT_DIR) {
+function analyzeFailure(workspace, failure, executeDirect, outputDir) {
   try {
     executeDirect("failure", workspace, { failure: failure.error });
     const outputPath = path.join(outputDir, "failure.json");
@@ -56,12 +52,12 @@ function analyzeFailure(workspace, failure, executeDirect, outputDir = OUTPUT_DI
   return null;
 }
 
-function retryStage(stage, workspace, failure, runStage, executeDirect) {
-  const task = updateTaskFailure(stage, failure);
+function retryStage(stage, workspace, failure, runStage, executeDirect, cfg) {
+  const task = updateTaskFailure(stage, failure, cfg.tasksFile);
 
   if (shouldEscalate(task, stage)) {
     task.human_required = true;
-    fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
+    fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
 
     console.log("🚨 Escalating to human due to repeated failures");
     process.exit(1);
@@ -69,12 +65,12 @@ function retryStage(stage, workspace, failure, runStage, executeDirect) {
 
   console.log("🔁 Retrying stage:", stage);
 
-  const analysis = analyzeFailure(workspace, failure, executeDirect);
+  const analysis = analyzeFailure(workspace, failure, executeDirect, cfg.outputDir);
   const context = analysis
     ? { failure: failure.error, analysis }
     : { failure: failure.error };
 
-  return runStage(stage, workspace, context);
+  return runStage(stage, workspace, context, cfg);
 }
 
 module.exports = { retryStage, shouldEscalate, analyzeFailure };

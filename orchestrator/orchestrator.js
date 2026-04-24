@@ -6,10 +6,7 @@ const readline = require("readline");
 const { compilePrompt } = require("./promptCompiler");
 const { captureFailure } = require("./failure");
 const { retryStage } = require("./retry");
-
-const COMPILED_DIR = path.join(__dirname, "..", "artifacts", "compiled");
-const OUTPUT_DIR   = path.join(__dirname, "..", "artifacts", "output");
-const TASKS_FILE   = path.join(__dirname, "..", "tasks.json");
+const { makeWorkspaceConfig } = require("./workspace-config");
 
 const DEFAULT_AGENTS = {
   spec:    "claude",
@@ -25,35 +22,35 @@ function getAgentForStage(stage) {
   return process.env[envVar] || DEFAULT_AGENTS[stage];
 }
 
-function updateCurrentStage(stage) {
+function updateCurrentStage(stage, cfg) {
   try {
-    const task = JSON.parse(fs.readFileSync(TASKS_FILE, "utf-8"));
+    const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
     task.current_stage = stage;
-    fs.writeFileSync(TASKS_FILE, JSON.stringify(task, null, 2));
+    fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
   } catch {
     // non-fatal; tasks.json observability is best-effort
   }
 }
 
-function readOutputArtifact(stage) {
+function readOutputArtifact(stage, cfg) {
   try {
-    return fs.readFileSync(path.join(OUTPUT_DIR, `${stage}.json`), "utf-8");
+    return fs.readFileSync(path.join(cfg.outputDir, `${stage}.json`), "utf-8");
   } catch {
     return null;
   }
 }
 
-function executeStage(stage, workspace, context = {}) {
+function executeStage(stage, workspace, context = {}, cfg) {
   const prompt = compilePrompt(stage, context);
 
-  fs.mkdirSync(COMPILED_DIR, { recursive: true });
-  fs.mkdirSync(OUTPUT_DIR,   { recursive: true });
-  const inputFile  = path.join(COMPILED_DIR, `${stage}.md`);
+  fs.mkdirSync(cfg.compiledDir, { recursive: true });
+  fs.mkdirSync(cfg.outputDir,   { recursive: true });
+  const inputFile  = path.join(cfg.compiledDir, `${stage}.md`);
   fs.writeFileSync(inputFile, prompt);
 
   const agent      = getAgentForStage(stage);
-  const outputFile = path.join(OUTPUT_DIR, `${stage}.json`);
-  const agentCli = path.join(__dirname, "..", "agent-cli", "agent-cli.js");
+  const outputFile = path.join(cfg.outputDir, `${stage}.json`);
+  const agentCli   = path.join(__dirname, "..", "agent-cli", "agent-cli.js");
 
   console.log(`▶ Running stage: ${stage} [${agent}]`);
 
@@ -66,12 +63,12 @@ function executeStage(stage, workspace, context = {}) {
   if (result.status !== 0) throw new Error(`agent-cli exited with status ${result.status}`);
 }
 
-function runStage(stage, workspace, context = {}) {
+function runStage(stage, workspace, context = {}, cfg) {
   try {
-    executeStage(stage, workspace, context);
+    executeStage(stage, workspace, context, cfg);
   } catch (err) {
-    const { failure } = captureFailure(stage, err, workspace);
-    return retryStage(stage, workspace, failure, runStage, executeStage);
+    const { failure } = captureFailure(stage, err, workspace, cfg.failuresDir);
+    return retryStage(stage, workspace, failure, runStage, executeStage, cfg);
   }
 }
 
@@ -94,12 +91,11 @@ function printReviewSummary(rawOutput) {
   }
 }
 
-function writePlanArtifacts(workspace, rawOutput) {
+function writePlanArtifacts(cfg, rawOutput) {
   try {
     const text = extractText(rawOutput);
-    const tasksDir = path.join(workspace, "tasks");
-    fs.mkdirSync(tasksDir, { recursive: true });
-    fs.writeFileSync(path.join(tasksDir, "plan.md"), text);
+    fs.mkdirSync(cfg.planDir, { recursive: true });
+    fs.writeFileSync(cfg.planFile, text);
   } catch {
     // non-fatal; executor will also attempt this directly
   }
@@ -114,14 +110,10 @@ const PIPELINE = [
   { stage: "review", contextKey: null,    requiresApproval: false },
 ];
 
-const APPROVAL_ARTIFACTS = {
-  spec: "SPEC.md",
-  plan: "tasks/plan.md",
-};
-
-function promptApproval(stage, workspace) {
-  const artifact = APPROVAL_ARTIFACTS[stage];
-  const artifactPath = artifact ? path.join(workspace, artifact) : "(see artifacts/output/)";
+function promptApproval(stage, cfg) {
+  const artifactPath = stage === "spec" ? cfg.specFile
+                     : stage === "plan" ? cfg.planFile
+                     : "(see .spiq/artifacts/output/)";
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     console.log(`\n📋 ${stage.toUpperCase()} complete. Review: ${artifactPath}`);
@@ -132,35 +124,35 @@ function promptApproval(stage, workspace) {
   });
 }
 
-function readRequest(workspace) {
-  const reqFile = path.join(workspace, "req.md");
-  if (!fs.existsSync(reqFile)) {
-    console.error(`Error: req.md not found in ${workspace}`);
-    console.error("Create req.md with your feature request before running agenticspiq.");
+function readRequest(cfg) {
+  if (!fs.existsSync(cfg.reqFile)) {
+    console.error(`Error: req.md not found at ${cfg.reqFile}`);
+    console.error("Run agenticspiq again — it will prompt you to set up requirements.");
     process.exit(1);
   }
-  return fs.readFileSync(reqFile, "utf-8");
+  return fs.readFileSync(cfg.reqFile, "utf-8");
 }
 
 async function runPipeline(workspace) {
-  const request = readRequest(workspace);
-  let context = { request };
+  const cfg = makeWorkspaceConfig(workspace);
+  const request = readRequest(cfg);
+  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, planDir: cfg.planDir };
 
   for (const { stage, contextKey, requiresApproval } of PIPELINE) {
-    updateCurrentStage(stage);
-    runStage(stage, workspace, context);
+    updateCurrentStage(stage, cfg);
+    runStage(stage, workspace, context, cfg);
 
-    const output = readOutputArtifact(stage);
+    const output = readOutputArtifact(stage, cfg);
     if (output) {
-      if (stage === "plan")   writePlanArtifacts(workspace, output);
+      if (stage === "plan")   writePlanArtifacts(cfg, output);
       if (stage === "review") printReviewSummary(output);
       if (contextKey) context = { ...context, [contextKey]: output };
     }
 
     if (requiresApproval) {
-      const approved = await promptApproval(stage, workspace);
+      const approved = await promptApproval(stage, cfg);
       if (!approved) {
-        console.log(`⛔ Pipeline stopped at ${stage}. Revise req.md and re-run.`);
+        console.log(`⛔ Pipeline stopped at ${stage}. Edit .spiq/req.md and re-run.`);
         process.exit(0);
       }
     }

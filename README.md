@@ -2,443 +2,284 @@
 
 A deterministic, multi-stage coding workflow powered by two CLI agents:
 
-* **Controller (reasoning + planning):** Claude Code using Claude Sonnet 4.5
-* **Executor (code + iteration):** OpenCode using Qwen3.5-27B
+| Agent | CLI | Default model | Role |
+|---|---|---|---|
+| **Controller** | Claude Code | `sonnet` (Claude Sonnet 4.6) | Spec, plan, review, failure analysis |
+| **Executor** | OpenCode | `opencode/qwen3.5-plus` | Build, test, fix loops |
 
-The system is orchestrated via Node.js, uses Git worktrees for isolation, and improves over time via a failure analysis loop.
+The system is orchestrated via Node.js and improves over time via a structured failure-analysis loop.
 
----
-
-## 🧠 Core Idea
-
-> Separate **thinking** from **doing**
-
-| Layer        | Responsibility                       |
-| ------------ | ------------------------------------ |
-| Controller   | Spec, plan, review, failure analysis |
-| Executor     | Build, test, fix loops               |
-| Orchestrator | State machine, routing, retries      |
-| Git          | Isolation, history, PR lifecycle     |
+> **Core principle:** Separate **thinking** from **doing** — the Controller decides, the Executor executes, the Orchestrator enforces.
 
 ---
 
-## 🔄 Workflow
+## 🚀 Get Started
+
+### Prerequisites
+
+| Tool | Install |
+|---|---|
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` |
+| [OpenCode CLI](https://opencode.ai) | `npm install -g opencode` |
+| Node.js ≥ 18 | [nodejs.org](https://nodejs.org) |
+| Git | [git-scm.com](https://git-scm.com) |
+
+Log in to both CLIs before first use:
+```bash
+claude login
+opencode login   # or set OPENCODE_API_KEY in your environment
+```
+
+### Install agenticspiq
+
+```bash
+# Clone and install
+git clone <repo-url> agenticspiq
+cd agenticspiq
+npm install
+
+# Configure a user-local npm prefix (skip if already done)
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+# Add to ~/.zshrc or ~/.bashrc:
+# export PATH="$HOME/.npm-global/bin:$PATH"
+source ~/.zshrc   # or restart your terminal
+
+# Link globally
+npm link
+```
+
+### Run on a new project
+
+```bash
+mkdir my-project && cd my-project
+agenticspiq
+# agenticspiq creates .spiq/ and prompts you to describe your feature request.
+# Fill it in, save, then re-run.
+agenticspiq
+```
+
+### Run on an existing project
+
+```bash
+cd /path/to/existing-project
+agenticspiq
+# agenticspiq detects any REQUIREMENTS.md / SPEC.md / BRIEF.md and asks if you
+# want to use it as your feature request.
+```
+
+Or point at a specific requirements document directly:
+
+```bash
+agenticspiq --req docs/requirements.md
+# Copies docs/requirements.md to .spiq/req.md and starts the pipeline immediately.
+```
+
+Or pipe requirements via stdin:
+
+```bash
+echo "Build a REST API with JWT auth and a PostgreSQL backend" | agenticspiq
+```
+
+### On first run, agenticspiq will
+
+1. Create `.spiq/` in your workspace (all framework state is isolated here)
+2. Source or create `req.md` from your requirements document
+3. Run the pipeline: **spec → plan → build → test → review**
+4. Pause after spec and plan for your approval before continuing
+
+Add `.spiq/` to your project's `.gitignore`:
+```bash
+echo ".spiq/" >> .gitignore
+```
+
+---
+
+## ⚙️ Configuration
+
+### `.env` — agent and model selection
+
+Copy and edit the `.env` file in the agenticspiq installation directory:
+
+```bash
+# Agent selection per stage (claude | opencode | gemini)
+AGENT_SPEC=claude
+AGENT_PLAN=claude
+AGENT_BUILD=opencode
+AGENT_TEST=opencode
+AGENT_REVIEW=claude
+AGENT_FAILURE=claude
+
+# Model per agent CLI
+CLAUDE_MODEL=sonnet              # Claude Code --model flag (e.g. sonnet, opus, haiku)
+OPENCODE_MODEL=opencode/qwen3.5-plus   # OpenCode -m flag
+GEMINI_MODEL=gemini-2.5-flash-preview  # Gemini CLI --model flag
+```
+
+Override a single model for one run:
+```bash
+CLAUDE_MODEL=opus agenticspiq --workspace /my/project
+```
+
+---
+
+## 🔄 Pipeline
 
 ```
-/spec → /plan → /build → /test → /review → /ship
+spec → plan → build → test → review
 ```
 
-### Stage Ownership
+| Stage | Agent | Approval required |
+|---|---|---|
+| spec | Claude (Controller) | ✅ yes — reviews SPEC.md |
+| plan | Claude (Controller) | ✅ yes — reviews tasks/plan.md |
+| build | OpenCode (Executor) | no |
+| test | OpenCode (Executor) | no |
+| review | Claude (Controller) | no |
 
-| Stage            | Agent    |
-| ---------------- | -------- |
-| /spec            | Claude   |
-| /plan            | Claude   |
-| /build           | OpenCode |
-| /test            | OpenCode |
-| /review          | Claude   |
-| failure-analysis | Claude   |
+Artifacts from each stage are stored in `.spiq/` and passed as context to the next stage.
+
+---
+
+## 📂 Workspace layout
+
+agenticspiq creates a single hidden directory in your workspace:
+
+```
+your-project/
+└── .spiq/
+    ├── req.md              ← your feature requirements
+    ├── SPEC.md             ← generated by spec stage
+    ├── tasks.json          ← pipeline state
+    ├── tasks/
+    │   ├── plan.md         ← generated by plan stage
+    │   └── todo.md
+    └── artifacts/
+        ├── compiled/       ← compiled stage prompts
+        ├── output/         ← raw agent output (JSON)
+        ├── failures/       ← failure records for analysis
+        └── logs/
+```
+
+Your existing project structure is **never touched** outside of `.spiq/`.
 
 ---
 
 ## 🧩 Architecture
 
 ```
-orchestrator.js
+bin/agenticspiq.js
       │
-      ├── Claude Code (Controller)
-      │     ├── spec
-      │     ├── plan
-      │     ├── review
-      │     └── failure-analysis
+      ├── utils/scaffold.js          ← first-run setup (.spiq/, req.md)
       │
-      └── OpenCode (Executor)
-            ├── build
-            ├── test
-            └── fix loops
+      └── orchestrator/orchestrator.js
+            │
+            ├── Claude Code (Controller)
+            │     ├── spec   → .spiq/SPEC.md
+            │     ├── plan   → .spiq/tasks/plan.md
+            │     ├── review
+            │     └── failure-analysis
+            │
+            └── OpenCode (Executor)
+                  ├── build
+                  ├── test
+                  └── fix loops (up to retry_limit)
 ```
+
+### Key modules
+
+| Path | Purpose |
+|---|---|
+| `orchestrator/orchestrator.js` | Pipeline state machine |
+| `orchestrator/workspace-config.js` | All path resolution (always `.spiq/`-relative) |
+| `orchestrator/failure.js` | Failure capture and persistence |
+| `orchestrator/retry.js` | Retry logic with escalation |
+| `orchestrator/promptCompiler.js` | Template → compiled prompt |
+| `agent-cli/agent-cli.js` | CLI dispatcher for agent runners |
+| `agent-cli/runners/claude.js` | Claude Code runner |
+| `agent-cli/runners/opencode.js` | OpenCode runner |
+| `agent-cli/runners/gemini.js` | Gemini runner |
+| `utils/scaffold.js` | First-run workspace initialisation |
+| `prompts/*.md` | Stage prompt templates |
+| `prompts/skills/` | Reusable skill modules |
 
 ---
 
-## 📂 Project Structure
+## 🔁 Failure Analysis Loop
+
+Instead of blind retries, the system uses structured analysis:
 
 ```
-agentic-system/
-├── orchestrator/        # State machine, failure capture, retry logic
-├── agent-cli/           # CLI entry point and agent runners
-├── prompts/             # Stage prompts and skills modules
-│   ├── *.md            # Stage templates (spec, plan, build, test, review)
-│   └── skills/         # Reusable skill modules
-├── commands/            # Command definitions with skill mappings
-├── skills/              # Detailed skill documentation
-├── artifacts/           # Generated outputs
-│   ├── compiled/       # Compiled prompts
-│   ├── failures/       # Failure records
-│   └── logs/           # Execution logs
-├── worktrees/          # Git worktrees for isolation
-├── repo/               # Working repository
-├── tasks.json          # State management
-├── .env.example        # Environment variable template
-└── README.md
+failure → Claude analyzes → { root_cause, fix_strategy, affected_files, confidence }
+        → injected into next build attempt
 ```
 
----
-
-## 🧾 State Management (`tasks.json`)
-
-Single source of truth:
-
-```json
-{
-  "current_stage": "spec",
-  "mode": "normal",
-  "retry_limit": 3,
-  "token_budget": {
-    "total": 200000,
-    "used": 0
-  },
-  "human_required": false
-}
-```
-
----
-
-## ⚙️ Agent Contract
-
-All agents are invoked via:
-
-```bash
-agent-cli run \
-  --stage <stage> \
-  --model <model> \
-  --input <file> \
-  --output <file> \
-  --workspace <path>
-```
-
----
-
-## 🔁 Failure Analysis Loop (Proto Fine-Tuning)
-
-Instead of blind retries:
-
-```
-failure → analyze → structured summary → guided fix
-```
-
-### Example Output
-
-```json
-{
-  "root_cause": "Missing null check",
-  "fix_scope": ["src/api.js"],
-  "strategy": "Add guard clause",
-  "confidence": 0.82
-}
-```
-
-This is injected into the next `/build` step.
-
----
-
-## 🔁 Retry Logic
-
-* Max retries per stage: `3`
-* Max fix loops: `3`
-* Same failure twice → escalate
-
----
-
-## 🎯 Skills & Commands
-
-### Command-Skill Mapping
-
-Each command invokes specific skills as defined in `commands/`:
-
-| Command | Primary Skill(s) | Additional Skills |
-|---------|------------------|--------------------|
-| `/spec` | spec-driven-development | — |
-| `/plan` | planning-and-task-breakdown | — |
-| `/build` | incremental-implementation, test-driven-development | debugging-and-error-recovery (on failure) |
-| `/test` | test-driven-development | browser-testing-with-devtools (browser issues) |
-| `/review` | code-review-and-quality | security-and-hardening, performance-optimization |
-
-### Available Skills
-
-Skills are documented in `skills/` directory:
-
-**Core Workflow:**
-- spec-driven-development
-- planning-and-task-breakdown
-- incremental-implementation
-- test-driven-development
-- debugging-and-error-recovery
-- code-review-and-quality
-
-**Specialized:**
-- frontend-ui-engineering
-- api-and-interface-design
-- security-and-hardening
-- performance-optimization
-- browser-testing-with-devtools
-- ci-cd-and-automation
-- git-workflow-and-versioning
-- documentation-and-adrs
-- shipping-and-launch
-- source-driven-development
-- context-engineering
-
----
-
-## ⚙️ Environment Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# Agent Configuration
-# Set custom CLI agents for each stage (defaults shown)
-AGENT_SPEC=claude        # Controller: spec generation
-AGENT_PLAN=claude        # Controller: task planning
-AGENT_BUILD=opencode     # Executor: code implementation
-AGENT_TEST=opencode      # Executor: test execution
-AGENT_REVIEW=claude      # Controller: code review
-AGENT_FAILURE=claude     # Controller: failure analysis
-```
-
-**Usage:**
-```bash
-# Use defaults (from .env or hardcoded)
-node orchestrator/orchestrator.js
-
-# Override specific agent
-AGENT_BUILD=my-custom-agent node orchestrator/orchestrator.js
-```
+A stage is retried up to `retry_limit` (default: 3) times before escalating to human review.
 
 ---
 
 ## 🧑‍💻 Human-in-the-Loop
 
-Triggered when:
-
-* ambiguity in spec
-* repeated failures
-* low confidence (< 0.7)
-* security-sensitive changes
-
-### Flow
-
-```
-Executor stuck → Orchestrator → Claude → Human → Resume
-```
-
----
-
-## 🤖 YOLO Mode (Autonomous)
-
-```json
-{ "mode": "yolo" }
-```
-
-### Behavior
-
-| Feature        | Normal | YOLO   |
-| -------------- | ------ | ------ |
-| Human prompts  | yes    | no     |
-| Auto-merge     | no     | yes    |
-| Risk tolerance | low    | higher |
-
-### Safeguards
-
-* diff limits
-* restricted paths
-* tests must pass
-* review must pass
-
----
-
-## 🔒 Safety Constraints
-
-* Max diff size (e.g. 300 lines)
-* File scope restriction (`src/`, `tests/`)
-* Token budget enforcement
-* Timeout per stage
-
----
-
-## 🪝 Git Integration
-
-### Worktrees
-
-```
-git worktree add worktrees/wt-<id> -b feature/<id>
-```
-
-### Commit per Stage
-
-```
-agent: spec complete
-agent: build complete
-```
-
-### PR Creation
-
-via GitHub CLI
-
----
-
-## 🔁 CI Feedback Loop (Optional Next Step)
-
-```
-PR → CI → fail → failure-analysis → fix → push
-```
-
-Not required for MVP, but critical at scale.
+Triggered automatically when:
+- Spec or plan stage completes (approval prompt)
+- A stage exceeds `retry_limit` failures (escalation)
 
 ---
 
 ## 🧠 Model Strategy
 
-### Controller
+| Role | Default | Override via |
+|---|---|---|
+| Controller (spec/plan/review) | Claude Sonnet 4.6 (`sonnet`) | `CLAUDE_MODEL` |
+| Executor (build/test) | Qwen3.5-plus (`opencode/qwen3.5-plus`) | `OPENCODE_MODEL` |
+| Gemini (optional) | Gemini 2.5 Flash Preview | `GEMINI_MODEL` |
 
-* Primary → Claude Sonnet 4.5
-* Fallback → Gemini Pro 3
-* Backup → GLM 5.1
+To switch the controller to Opus for a harder task:
+```bash
+CLAUDE_MODEL=opus agenticspiq
+```
 
-### Executor
+---
 
-* Default → Qwen3.5-27B
-* Heavy tasks → Kimi K2.5
-* Fallback → GLM 5.1
+## 🔒 Safety Constraints
+
+- Max diff size: ~300 lines
+- File scope restriction: `src/`, `tests/`
+- Token budget enforcement per task
+- Timeout per stage
+
+---
+
+## 🪝 Git Integration
+
+Each stage can commit its artifacts:
+
+```
+agent: spec complete
+agent: plan complete
+agent: build complete
+```
+
+Git worktrees can be used for isolated execution per task (see `worktrees/` in the architecture above).
 
 ---
 
 ## ⚠️ Design Principles
 
-1. **Strict role separation**
-
-   * Controller never writes code
-   * Executor never plans
-
-2. **Artifact-driven state**
-
-   * No hidden memory
-   * Everything persisted
-
-3. **Constrained execution**
-
-   * Minimal diffs
-   * Explicit fix scopes
-
-4. **Failure-guided iteration**
-
-   * Learn without fine-tuning
-
----
-
-## 🚀 Running the System
-
-### Option A: Global CLI (recommended)
-
-Install `agenticspiq` once, then invoke it from any project directory:
-
-```bash
-# 1. Clone the repo and install dependencies
-git clone <repo-url> agenticspiq
-cd agenticspiq
-npm install
-
-# 2. Configure a user-local npm prefix (skip if already done)
-mkdir -p ~/.npm-global
-npm config set prefix ~/.npm-global
-
-# Add to your shell profile (~/.zshrc or ~/.bashrc):
-# export PATH="$HOME/.npm-global/bin:$PATH"
-source ~/.zshrc   # or restart your terminal
-
-# 3. Link the package globally
-npm link
-
-# 4. Initialise your workspace directory
-cd /your/project
-bash ~/.npm-global/lib/node_modules/agenticspiq/utils/init-workspace.sh
-# Creates required directories and a req.md template
-
-# 5. Fill in your feature request
-$EDITOR req.md
-
-# 6. Run
-agenticspiq
-```
-
-`agenticspiq` automatically sets `--workspace` to the current directory.
-Pass it explicitly to override:
-
-```bash
-agenticspiq --workspace /path/to/project
-```
-
-#### Workspace structure created by `init-workspace.sh`
-
-```
-your-project/
-├── artifacts/
-│   ├── compiled/    # compiled stage prompts
-│   ├── failures/    # persisted failure records
-│   ├── logs/        # execution logs
-│   └── output/      # stage output artifacts
-├── tasks/           # plan and todo files
-├── worktrees/       # git worktrees for isolated execution
-└── repo/            # working repository clone
-```
-
-Run `init-workspace.sh` once per project before the first `agenticspiq` invocation. Re-running it is safe — existing directories and files are not modified.
-
-### Option B: Local invocation
-
-```bash
-npm install
-npm start                                   # runs with --workspace .
-node orchestrator/orchestrator.js --workspace /path/to/project
-```
+1. **Strict role separation** — Controller never writes code; Executor never plans
+2. **Artifact-driven state** — No hidden memory; everything persisted in `.spiq/`
+3. **Constrained execution** — Minimal diffs, explicit fix scopes
+4. **Failure-guided iteration** — Structured analysis guides each retry
 
 ---
 
 ## 📈 Future Enhancements
 
-* CI auto-fix loop
-* failure memory dataset
-* dynamic model routing
-* parallel task execution
-* fine-tuning pipeline
+- CI auto-fix loop
+- Failure memory dataset for fine-tuning
+- Dynamic model routing based on task complexity
+- Parallel task execution
 
 ---
-
-## 🧠 Key Insight
-
-> Reliability doesn’t come from more agents.
-> It comes from **clear roles, strict contracts, and controlled feedback loops**.
-
----
-
-## 🏁 Summary
-
-This system provides:
-
-* deterministic multi-agent workflow
-* CLI-based modular agents
-* Git-native execution model
-* self-improving feedback loop
-* minimal architecture with scalability
-
----
-
-## 🧠 One-Line Takeaway
 
 > **Claude decides. OpenCode executes. The orchestrator enforces.**
-
----
-
-If you want, I can next:
-
-* turn this into a **GitHub template repo with working scripts**, or
-* add **CI + auto-fix loop directly into this README + codebase**

@@ -1,9 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const FAILURES_DIR = path.join(__dirname, "..", "artifacts", "failures");
-
-function captureFailure(stage, error, workspace, failuresDir = FAILURES_DIR) {
+function captureFailure(stage, error, workspace, failuresDir) {
   const ts = Date.now();
 
   const failure = {

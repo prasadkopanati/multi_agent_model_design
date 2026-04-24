@@ -12,4 +12,5 @@ Read the existing spec (SPEC.md) and the relevant codebase sections. Then:
 5. Add checkpoints between phases
 6. Present the plan for human review
 
-Save the plan to tasks/plan.md and task list to tasks/todo.md.
+Save the plan to: {{PLAN_FILE}}
+Save the task list to: {{PLAN_DIR}}/todo.md

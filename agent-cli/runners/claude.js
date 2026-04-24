@@ -7,10 +7,11 @@ const AGENTICSPIQ_BIN = path.join(__dirname, "..", "..", "node_modules", ".bin")
 function runClaude(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
 
+  const model = process.env.CLAUDE_MODEL || "sonnet";
   const result = spawnSync("claude", [
     "--dangerously-skip-permissions",
     "-p", "Execute the stage instructions above.",
-    "--model", "sonnet",
+    "--model", model,
     "--output-format", "json",
   ], {
     cwd: workspace,
