@@ -32,6 +32,15 @@ function updateCurrentStage(stage, cfg) {
   }
 }
 
+function readCurrentStage(cfg) {
+  try {
+    const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
+    return task.current_stage || null;
+  } catch {
+    return null;
+  }
+}
+
 function readOutputArtifact(stage, cfg) {
   try {
     return fs.readFileSync(path.join(cfg.outputDir, `${stage}.json`), "utf-8");
@@ -136,9 +145,30 @@ function readRequest(cfg) {
 async function runPipeline(workspace) {
   const cfg = makeWorkspaceConfig(workspace);
   const request = readRequest(cfg);
-  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, planDir: cfg.planDir };
 
-  for (const { stage, contextKey, requiresApproval } of PIPELINE) {
+  // Determine resume point
+  const savedStage = readCurrentStage(cfg);
+  const resumeIdx = savedStage && savedStage !== "complete"
+    ? PIPELINE.findIndex(p => p.stage === savedStage)
+    : -1;
+  const startIdx = resumeIdx >= 0 ? resumeIdx : 0;
+
+  if (startIdx > 0) {
+    console.log(`↩  Resuming from stage: ${PIPELINE[startIdx].stage}`);
+  }
+
+  // Pre-load context from persisted artifacts for stages that already completed
+  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, planDir: cfg.planDir };
+  for (let i = 0; i < startIdx; i++) {
+    const { stage, contextKey } = PIPELINE[i];
+    if (contextKey) {
+      const output = readOutputArtifact(stage, cfg);
+      if (output) context = { ...context, [contextKey]: output };
+    }
+  }
+
+  for (let i = startIdx; i < PIPELINE.length; i++) {
+    const { stage, contextKey, requiresApproval } = PIPELINE[i];
     updateCurrentStage(stage, cfg);
     runStage(stage, workspace, context, cfg);
 
@@ -158,6 +188,7 @@ async function runPipeline(workspace) {
     }
   }
 
+  updateCurrentStage("complete", cfg);
   console.log("✅ Pipeline complete");
 }
 

@@ -9,6 +9,7 @@ artifacts/compiled/
 artifacts/failures/
 artifacts/logs/
 artifacts/output/
+tasks.json
 
 # Git worktrees for isolation
 worktrees/
