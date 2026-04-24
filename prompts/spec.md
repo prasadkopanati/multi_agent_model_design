@@ -12,4 +12,4 @@ Using the requirements above, generate a structured spec covering all six core a
 
 If any critical information is missing (tech stack, constraints, acceptance criteria), make reasonable assumptions and note them clearly in the spec.
 
-Save the spec as SPEC.md in the project root.
+Save the spec to: {{SPEC_FILE}}

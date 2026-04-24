@@ -7,10 +7,11 @@ const AGENTICSPIQ_BIN = path.join(__dirname, "..", "..", "node_modules", ".bin")
 function runOpenCode(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
 
+  const model = process.env.OPENCODE_MODEL || "opencode/qwen3.5-plus";
   const result = spawnSync("opencode", [
     "run",
     "--dangerously-skip-permissions",
-    "-m", "opencode/qwen3.5-plus",
+    "--model", model,
     "Execute the stage instructions."
   ], {
     cwd: workspace,

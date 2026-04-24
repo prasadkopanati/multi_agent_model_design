@@ -74,7 +74,7 @@ test("returns false for a stage with no failures", () => {
 
 test("analyzeFailure returns null when executeDirect throws", () => {
   const throwingDirect = () => { throw new Error("analysis agent unavailable"); };
-  const result = analyzeFailure("/workspace", { error: "original error" }, throwingDirect);
+  const result = analyzeFailure("/workspace", { error: "original error" }, throwingDirect, "/irrelevant/dir");
   assert.equal(result, null);
 });
 

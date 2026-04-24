@@ -10,8 +10,8 @@ This is an **agentic coding system** that orchestrates a deterministic, multi-st
 
 | Agent | Model | Role |
 |-------|-------|------|
-| **Controller** | Claude Code (Sonnet 4.5) | Spec, plan, review, failure analysis |
-| **Executor** | OpenCode (Qwen3.5-27B) | Build, test, fix loops |
+| **Controller** | Claude Code (configurable via `CLAUDE_MODEL`, default `sonnet`) | Spec, plan, review, failure analysis |
+| **Executor** | OpenCode (configurable via `OPENCODE_MODEL`, default `opencode/qwen3.5-plus`) | Build, test, fix loops |
 
 ### Core Design Principle
 
@@ -22,30 +22,34 @@ This is an **agentic coding system** that orchestrates a deterministic, multi-st
 ## Architecture
 
 ```
-orchestrator.js
+bin/agenticspiq.js
       │
-      ├── Claude Code (Controller)
-      │     ├── spec
-      │     ├── plan
-      │     ├── review
-      │     └── failure-analysis
+      ├── utils/scaffold.js          ← first-run: creates .spiq/, sources req.md
       │
-      └── OpenCode (Executor)
-            ├── build
-            ├── test
-            └── fix loops
+      └── orchestrator/orchestrator.js
+            │
+            ├── Claude Code (Controller)
+            │     ├── spec   → .spiq/SPEC.md
+            │     ├── plan   → .spiq/tasks/plan.md
+            │     ├── review
+            │     └── failure-analysis
+            │
+            └── OpenCode (Executor)
+                  ├── build
+                  ├── test
+                  └── fix loops
 ```
 
 ### Stage Pipeline
 
 ```
-/spec → /plan → /build → /test → /review
+spec → plan → build → test → review
 ```
 
 Each stage:
 - Has a dedicated agent owner
-- Produces artifacts in `artifacts/`
-- Can retry up to 3 times on failure
+- Produces artifacts in `.spiq/artifacts/`
+- Can retry up to 3 times on failure (with Claude-guided failure analysis)
 - Escalates to human after max retries exceeded
 
 ---
@@ -54,20 +58,42 @@ Each stage:
 
 | Path | Purpose |
 |------|--------|
+| `bin/agenticspiq.js` | CLI entry point; runs scaffold then spawns orchestrator |
+| `utils/scaffold.js` | First-run workspace setup: creates `.spiq/`, sources `req.md` |
 | `orchestrator/orchestrator.js` | Main state machine, stage routing, pipeline execution |
+| `orchestrator/workspace-config.js` | Single authority for all path resolution (always `.spiq/`-based) |
 | `orchestrator/failure.js` | Failure capture and persistence |
 | `orchestrator/retry.js` | Retry logic with escalation |
 | `orchestrator/promptCompiler.js` | Compiles prompts from templates + skills |
-| `agent-cli/agent-cli.js` | CLI entry point for agent invocation |
+| `agent-cli/agent-cli.js` | CLI dispatcher for agent runners |
+| `agent-cli/runners/claude.js` | Claude Code runner (model from `CLAUDE_MODEL`) |
+| `agent-cli/runners/opencode.js` | OpenCode runner (model from `OPENCODE_MODEL`) |
+| `agent-cli/runners/gemini.js` | Gemini runner (model from `GEMINI_MODEL`) |
 | `prompts/*.md` | Stage prompt templates (spec, plan, build, test, review, failure) |
 | `prompts/skills/` | Reusable skill modules (SKILLS.md, DEBUGGING.md, GIT.md, etc.) |
-| `tasks.json` | Single source of truth for system state |
-| `artifacts/failures/` | Persisted failure records |
-| `worktrees/` | Git worktrees for isolated execution per task |
+
+## Workspace State (`.spiq/` directory)
+
+All framework state lives in `workspace/.spiq/`. The workspace root is never written to.
+
+```
+workspace/.spiq/
+├── req.md              ← feature requirements (sourced on first run)
+├── SPEC.md             ← written by spec agent
+├── tasks.json          ← pipeline state
+├── tasks/
+│   ├── plan.md         ← written by plan agent
+│   └── todo.md
+└── artifacts/
+    ├── compiled/       ← compiled stage prompts
+    ├── output/         ← raw agent JSON output per stage
+    ├── failures/       ← persisted failure records
+    └── logs/
+```
 
 ---
 
-## State Management (`tasks.json`)
+## State Management (`.spiq/tasks.json`)
 
 ```json
 {
@@ -88,28 +114,36 @@ Each stage:
 }
 ```
 
-### Mode Behavior
-
-| Feature | Normal | YOLO |
-|---------|--------|------|
-| Human prompts | yes | no |
-| Auto-merge | no | yes |
-| Risk tolerance | low | higher |
-
 ---
 
 ## Agent Contract
 
-All agents are invoked via:
+All agents are invoked via `agent-cli/agent-cli.js`:
 
 ```bash
-agent-cli run \
+node agent-cli/agent-cli.js \
+  --agent <claude|opencode|gemini> \
   --stage <stage> \
-  --model <model> \
-  --input <file> \
-  --output <file> \
+  --input <absolute-path-to-compiled-prompt> \
+  --output <absolute-path-for-json-output> \
   --workspace <path>
 ```
+
+The `--workspace` flag sets `cwd` for the agent process so it can read and edit the actual source code. Input/output paths always resolve into `.spiq/artifacts/`.
+
+---
+
+## Model Configuration
+
+Models are configured via environment variables in `.env`:
+
+| Env var | Default | Used by |
+|---|---|---|
+| `CLAUDE_MODEL` | `sonnet` | `agent-cli/runners/claude.js` |
+| `OPENCODE_MODEL` | `opencode/qwen3.5-plus` | `agent-cli/runners/opencode.js` |
+| `GEMINI_MODEL` | `gemini-2.5-flash-preview` | `agent-cli/runners/gemini.js` |
+
+Override at runtime: `CLAUDE_MODEL=opus agenticspiq`
 
 ---
 
@@ -132,43 +166,21 @@ failure → analyze (Claude) → structured summary → guided fix
 }
 ```
 
-This is injected into the next `/build` step as context.
-
----
-
-## Git Integration
-
-### Worktrees for Isolation
-
-```bash
-git worktree add worktrees/wt-<id> -b feature/<id>
-```
-
-Each task runs in its own worktree to prevent cross-contamination.
-
-### Commit Convention
-
-Commits are made per stage:
-```
-agent: spec complete
-agent: plan complete  
-agent: build complete
-```
+This is injected into the next build attempt as context.
 
 ---
 
 ## Human-in-the-Loop Triggers
 
 Human intervention is required when:
-- Ambiguity detected in spec
-- Repeated failures (≥ retry_limit)
-- Low confidence (< 0.7) from analysis
-- Security-sensitive changes detected
+- Spec or plan stage completes (approval prompt before continuing)
+- Repeated failures (> retry_limit for a stage)
+- Low confidence (< 0.7) from failure analysis
 
 ### Escalation Flow
 
 ```
-Executor stuck → Orchestrator → Claude → Human → Resume
+Executor stuck → Orchestrator → Claude (failure analysis) → Human → Resume
 ```
 
 ---
@@ -176,23 +188,9 @@ Executor stuck → Orchestrator → Claude → Human → Resume
 ## Design Principles
 
 1. **Strict role separation** — Controller never writes code; Executor never plans
-2. **Artifact-driven state** — No hidden memory; everything persisted
+2. **Artifact-driven state** — No hidden memory; everything persisted in `.spiq/`
 3. **Constrained execution** — Minimal diffs, explicit fix scopes
 4. **Failure-guided iteration** — Learn without fine-tuning
-
----
-
-## Model Strategy
-
-### Controller (Reasoning)
-- Primary: Claude Sonnet 4.5
-- Fallback: Gemini Pro 3
-- Backup: GLM 5.1
-
-### Executor (Implementation)
-- Default: Qwen3.5-27B
-- Heavy tasks: Kimi K2.5
-- Fallback: GLM 5.1
 
 ---
 

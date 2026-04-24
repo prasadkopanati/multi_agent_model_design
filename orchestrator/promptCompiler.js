@@ -34,6 +34,9 @@ function compilePrompt(stage, context = {}) {
   template = template.replaceAll("{{SPEC}}",      context.spec     || "");
   template = template.replaceAll("{{BUILD}}",     context.build    || "");
   template = template.replaceAll("{{TEST}}",      context.test     || "");
+  template = template.replaceAll("{{SPEC_FILE}}",  context.specFile  || "SPEC.md");
+  template = template.replaceAll("{{PLAN_FILE}}",  context.planFile  || "tasks/plan.md");
+  template = template.replaceAll("{{PLAN_DIR}}",   context.planDir   || "tasks");
 
   return template;
 }

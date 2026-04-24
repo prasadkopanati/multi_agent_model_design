@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 const { parseArgs } = require("node:util");
+const path          = require("path");
+const fs            = require("fs");
 const { runClaude } = require("./runners/claude");
 const { runOpenCode } = require("./runners/opencode");
 const { runGemini } = require("./runners/gemini");
@@ -23,8 +25,9 @@ function main() {
     process.exit(1);
   }
 
-  const defaultInput  = `artifacts/compiled/${stage}.md`;
-  const defaultOutput = `artifacts/output/${stage}.json`;
+  const stateDir     = workspace ? path.join(workspace, ".spiq") : process.cwd();
+  const defaultInput  = path.join(stateDir, "artifacts", "compiled", `${stage}.md`);
+  const defaultOutput = path.join(stateDir, "artifacts", "output",   `${stage}.json`);
 
   try {
     if (agent === "claude") {
