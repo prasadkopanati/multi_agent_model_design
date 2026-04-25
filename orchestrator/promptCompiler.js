@@ -4,15 +4,19 @@ const path = require("path");
 const SKILLS_DIR = path.join(__dirname, "..", "prompts", "skills");
 const PROMPTS_DIR = path.join(__dirname, "..", "prompts");
 
+function stripFrontmatter(content) {
+  return content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+}
+
 function load(file) {
-  return fs.readFileSync(path.join(SKILLS_DIR, file), "utf-8");
+  return stripFrontmatter(fs.readFileSync(path.join(SKILLS_DIR, file), "utf-8"));
 }
 
 const STAGE_SKILLS = {
   spec:    ["SKILLS.md", "SPEC_DRIVEN.md"],
   plan:    ["SKILLS.md", "PLANNING.md"],
-  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md"],
-  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md"],
+  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WEB_DEV.md", "THEME_FACTORY.md", "WEB_ARTIFACTS.md", "CONTENT_CREATION.md", "API_DESIGN.md", "DATABASE.md", "DOCKER.md", "GIT.md"],
+  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md", "WEB_DEV.md", "WEB_ARTIFACTS.md", "API_TESTING.md"],
   review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md"],
   failure: ["SKILLS.md", "DEBUGGING.md"],
 };

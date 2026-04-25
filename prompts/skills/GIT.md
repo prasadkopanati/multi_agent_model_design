@@ -208,6 +208,41 @@ POTENTIAL CONCERNS:
 
 This pattern catches wrong assumptions early and gives reviewers a clear map of the change. The "DIDN'T TOUCH" section is especially important — it shows you exercised scope discipline and didn't go on an unsolicited renovation.
 
+## Agent Attribution
+
+Every commit you make as an agent is automatically authored under your agent identity (set via `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` in your runtime environment). You do not need to configure this yourself.
+
+What the git log will show:
+
+```
+Author:    Claude Code Agent <claude-agent@agenticspiq.local>
+Committer: <the user's global git identity>
+```
+
+### Co-Authored-By trailer
+
+Always append a `Co-Authored-By:` trailer to the body of every commit you make. This makes the agent's contribution visible in GitHub's commit view and is the same attribution pattern used by GitHub Copilot.
+
+```
+feat: add email validation to registration endpoint
+
+Prevents invalid email formats from reaching the database.
+Uses Zod schema validation at the route handler level.
+
+Co-Authored-By: Claude Code Agent <claude-agent@agenticspiq.local>
+```
+
+The trailer format is always:
+```
+Co-Authored-By: <Your Agent Name> <your-agent-email@agenticspiq.local>
+```
+
+Use the name and email that match your runner's `GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`. Never omit this trailer.
+
+### GitHub Contributor visibility
+
+With `.local` emails, the agent name appears in git history and GitHub's commit view as plain text, but without a linked GitHub profile or avatar. To promote an agent to a full GitHub contributor with avatar and profile link, the email must be replaced with a GitHub Bot account's noreply address — see project documentation for that upgrade path.
+
 ## Pre-Commit Hygiene
 
 Before every commit:
