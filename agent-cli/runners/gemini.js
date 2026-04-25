@@ -13,6 +13,11 @@ function runGemini(stage, input, output, workspace) {
     cwd: workspace,
     input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME:  "Gemini Agent",
+      GIT_AUTHOR_EMAIL: "gemini-agent@agenticspiq.local",
+    },
   });
 
   if (result.error) throw result.error;

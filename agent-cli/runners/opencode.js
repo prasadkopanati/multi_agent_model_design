@@ -2,7 +2,8 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const AGENTICSPIQ_BIN = path.join(__dirname, "..", "..", "node_modules", ".bin");
+const AGENTICSPIQ_NODE_MODULES = path.join(__dirname, "..", "..", "node_modules");
+const AGENTICSPIQ_BIN = path.join(AGENTICSPIQ_NODE_MODULES, ".bin");
 
 function runOpenCode(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
@@ -19,7 +20,10 @@ function runOpenCode(stage, input, output, workspace) {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       ...process.env,
-      PATH: `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+      PATH:             `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+      NODE_PATH:        `${AGENTICSPIQ_NODE_MODULES}${path.delimiter}${process.env.NODE_PATH || ""}`,
+      GIT_AUTHOR_NAME:  "OpenCode Agent",
+      GIT_AUTHOR_EMAIL: "opencode-agent@agenticspiq.local",
     },
   });
 

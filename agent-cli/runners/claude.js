@@ -19,7 +19,9 @@ function runClaude(stage, input, output, workspace) {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       ...process.env,
-      PATH: `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+      PATH:             `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+      GIT_AUTHOR_NAME:  "Claude Code Agent",
+      GIT_AUTHOR_EMAIL: "claude-agent@agenticspiq.local",
     },
   });
 

@@ -1,6 +1,7 @@
 const fs       = require("fs");
 const path     = require("path");
 const readline = require("readline");
+const { spawnSync } = require("child_process");
 
 const SPIQ_DIRS = [
   "artifacts/compiled",
@@ -61,6 +62,12 @@ async function ensureDirs(workspace) {
   const tasksFile = path.join(spiqDir, "tasks.json");
   if (!fs.existsSync(tasksFile)) {
     fs.writeFileSync(tasksFile, JSON.stringify(INITIAL_TASKS, null, 2));
+  }
+
+  if (!fs.existsSync(path.join(workspace, ".git"))) {
+    spawnSync("git", ["init"], { cwd: workspace });
+    spawnSync("git", ["config", "user.name",  "agenticspiq-agent"], { cwd: workspace });
+    spawnSync("git", ["config", "user.email", "agent@agenticspiq.local"], { cwd: workspace });
   }
 }
 

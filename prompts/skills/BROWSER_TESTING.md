@@ -21,26 +21,41 @@ Use Chrome DevTools MCP to give your agent eyes into the browser. This bridges t
 
 **When NOT to use:** Backend-only changes, CLI tools, or code that doesn't run in a browser.
 
-## Setting Up Chrome DevTools MCP
+## Browser Verification Tools
 
-### Installation
+Use the best tool available in your runtime environment. They are listed here in order of preference.
+
+### Option 1: Playwright (primary — works in all agents)
+
+Playwright runs real browsers headlessly and is the default verification method across Claude Code, Gemini CLI, and OpenCode.
 
 ```bash
-# Add Chrome DevTools MCP server to your Claude Code config
-# In your project's .mcp.json or Claude Code settings:
-{
-  "mcpServers": {
-    "chrome-devtools": {
-      "command": "npx",
-      "args": ["@anthropic/chrome-devtools-mcp@latest"]
-    }
-  }
-}
+# Run existing Playwright test suite
+npx playwright test
+
+# Inline smoke check (no config needed)
+node -e "
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('file://' + require('path').resolve('index.html'));
+  await page.waitForLoadState('networkidle');
+  await browser.close();
+  if (errors.length) { console.error('Browser errors:', errors); process.exit(1); }
+  console.log('Smoke check passed');
+})();
+"
 ```
 
-### Available Tools
+If `require('playwright')` fails, check that `NODE_PATH` includes the agenticspiq `node_modules`.
 
-Chrome DevTools MCP provides these capabilities:
+### Option 2: Chrome DevTools MCP (Claude Code only)
+
+If you are running inside Claude Code and the Chrome DevTools MCP server is configured, it provides richer inspection capabilities:
 
 | Tool | What It Does | When to Use |
 |------|-------------|-------------|
@@ -52,6 +67,8 @@ Chrome DevTools MCP provides these capabilities:
 | **Element Styles** | Reads computed styles for elements | Debug CSS issues, verify styling |
 | **Accessibility Tree** | Reads the accessibility tree | Verify screen reader experience |
 | **JavaScript Execution** | Runs JavaScript in the page context | Read-only state inspection and debugging (see Security Boundaries) |
+
+If the MCP server is not available, fall back to Playwright.
 
 ## Security Boundaries
 
