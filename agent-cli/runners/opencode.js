@@ -5,6 +5,21 @@ const path = require("path");
 const AGENTICSPIQ_NODE_MODULES = path.join(__dirname, "..", "..", "node_modules");
 const AGENTICSPIQ_BIN = path.join(AGENTICSPIQ_NODE_MODULES, ".bin");
 
+const OPENCODE_CONFIG = JSON.stringify({
+  compaction: {
+    auto: true,
+    prune: true,
+    reserved: 20000,
+  },
+  provider: {
+    opencode: {
+      options: {
+        setCacheKey: true,
+      },
+    },
+  },
+});
+
 function runOpenCode(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
 
@@ -20,10 +35,11 @@ function runOpenCode(stage, input, output, workspace) {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       ...process.env,
-      PATH:             `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
-      NODE_PATH:        `${AGENTICSPIQ_NODE_MODULES}${path.delimiter}${process.env.NODE_PATH || ""}`,
-      GIT_AUTHOR_NAME:  "OpenCode Agent",
-      GIT_AUTHOR_EMAIL: "opencode-agent@agenticspiq.local",
+      PATH:                    `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+      NODE_PATH:               `${AGENTICSPIQ_NODE_MODULES}${path.delimiter}${process.env.NODE_PATH || ""}`,
+      GIT_AUTHOR_NAME:         "OpenCode Agent",
+      GIT_AUTHOR_EMAIL:        "opencode-agent@agenticspiq.local",
+      OPENCODE_CONFIG_CONTENT: OPENCODE_CONFIG,
     },
   });
 
