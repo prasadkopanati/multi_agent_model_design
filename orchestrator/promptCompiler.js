@@ -15,7 +15,7 @@ function load(file) {
 const STAGE_SKILLS = {
   spec:    ["SKILLS.md", "SPEC_DRIVEN.md"],
   plan:    ["SKILLS.md", "PLANNING.md"],
-  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WEB_DEV.md", "THEME_FACTORY.md", "WEB_ARTIFACTS.md", "CONTENT_CREATION.md", "API_DESIGN.md", "DATABASE.md", "DOCKER.md", "GIT.md"],
+  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WEB_DEV.md", "THEME_FACTORY.md", "WEB_ARTIFACTS.md", "CONTENT_CREATION.md", "API_DESIGN.md", "DATABASE.md", "DOCKER.md", "PDF.md", "GIT.md"],
   test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md", "WEB_DEV.md", "WEB_ARTIFACTS.md", "API_TESTING.md"],
   review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md"],
   failure: ["SKILLS.md", "DEBUGGING.md"],

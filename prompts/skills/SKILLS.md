@@ -25,6 +25,7 @@ This system provides the following skills for agent operations. Skills are injec
 - **api-testing** — HTTP integration tests with supertest/httpx, auth flow testing, contract testing
 - **database-development** — Schema design, migrations, parameterized queries, transactions, N+1 prevention
 - **docker-and-containers** — Dockerfiles, multi-stage builds, docker-compose, health checks, env injection
+- **pdf-operations** — Create, read, modify, merge, and fill PDF files using pdf-lib, pdf-parse, and Playwright
 
 ## Quality Skills
 
