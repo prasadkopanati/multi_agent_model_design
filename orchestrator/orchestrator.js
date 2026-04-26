@@ -12,6 +12,7 @@ const DEFAULT_AGENTS = {
   spec:    "claude",
   plan:    "claude",
   review:  "claude",
+  finish:  "gemini",
   failure: "claude",
   build:   "opencode",
   test:    "opencode",
@@ -112,11 +113,12 @@ function writePlanArtifacts(cfg, rawOutput) {
 
 // Stage sequence and which output key each stage's artifact maps to for the next stage.
 const PIPELINE = [
-  { stage: "spec",   contextKey: "spec",  requiresApproval: true  },
-  { stage: "plan",   contextKey: "plan",  requiresApproval: true  },
-  { stage: "build",  contextKey: "build", requiresApproval: false },
-  { stage: "test",   contextKey: "test",  requiresApproval: false },
-  { stage: "review", contextKey: null,    requiresApproval: false },
+  { stage: "spec",   contextKey: "spec",   requiresApproval: true  },
+  { stage: "plan",   contextKey: "plan",   requiresApproval: true  },
+  { stage: "build",  contextKey: "build",  requiresApproval: false },
+  { stage: "test",   contextKey: "test",   requiresApproval: false },
+  { stage: "review", contextKey: "review", requiresApproval: false },
+  { stage: "finish", contextKey: null,     requiresApproval: false },
 ];
 
 function promptApproval(stage, cfg) {

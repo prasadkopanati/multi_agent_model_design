@@ -2,6 +2,9 @@ const fs       = require("fs");
 const path     = require("path");
 const readline = require("readline");
 const { spawnSync } = require("child_process");
+const { stripFrontmatter } = require("../orchestrator/promptCompiler");
+
+const SKILLS_SRC = path.join(__dirname, "..", "prompts", "skills");
 
 const SPIQ_DIRS = [
   "artifacts/compiled",
@@ -121,8 +124,21 @@ async function ensureRequirements(workspace, opts = {}) {
   process.exit(0);
 }
 
+function ensureSkills(workspace) {
+  const dest = path.join(workspace, ".spiq", "skills");
+  if (fs.existsSync(dest)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const f of fs.readdirSync(SKILLS_SRC)) {
+    if (!f.endsWith(".md")) continue;
+    const raw   = fs.readFileSync(path.join(SKILLS_SRC, f), "utf-8");
+    const clean = stripFrontmatter(raw);   // strip YAML so agents never see ---name:--- directives
+    fs.writeFileSync(path.join(dest, f), clean);
+  }
+}
+
 async function scaffold(workspace, opts = {}) {
   await ensureDirs(workspace);
+  ensureSkills(workspace);
   await ensureRequirements(workspace, opts);
 }
 

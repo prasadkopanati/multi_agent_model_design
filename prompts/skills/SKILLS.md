@@ -4,12 +4,15 @@ This system provides the following skills for agent operations. Skills are injec
 
 ## Development Skills
 
+- **brainstorming** — Socratic clarification before writing a spec; surfaces assumptions and alternatives
 - **spec-driven-development** — Write structured specifications before coding
 - **planning-and-task-breakdown** — Break work into small, verifiable tasks
 - **incremental-implementation** — Implement features incrementally with tests
 - **test-driven-development** — Write failing tests first, then implement
 - **debugging-and-error-recovery** — Systematic root-cause debugging
 - **git-workflow-and-versioning** — Atomic commits, branch discipline, clean history
+- **dispatching-parallel-agents** — Execute independent plan tasks in batches; minimize build time via dependency-ordered dispatch
+- **verification-before-completion** — Confirm work is actually done before declaring a stage complete; prevents silent false completion
 
 ## Web Skills
 
@@ -30,8 +33,14 @@ This system provides the following skills for agent operations. Skills are injec
 ## Quality Skills
 
 - **code-review-and-quality** — Five-axis review: correctness, readability, architecture, security, performance
+- **requesting-code-review** — Produce a structured handoff document at build end; give reviewers a navigational map not just diffs
+- **receiving-code-review** — Triage FAIL verdict findings by severity; address Critical first; verify each fix before resubmitting
 - **security-and-hardening** — Input validation, XSS/injection prevention, auth patterns, secrets hygiene
 - **performance-optimization** — Profiling, Core Web Vitals, bundle size, render performance
+
+## Lifecycle Skills
+
+- **finishing-a-development-branch** — Final verification, delivery summary, PR/merge/keep/discard, workspace cleanup
 
 ## Using Skills
 

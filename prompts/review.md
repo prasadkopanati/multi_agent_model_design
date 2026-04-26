@@ -2,7 +2,7 @@
 description: Conduct a five-axis code review — correctness, readability, architecture, security, performance
 ---
 
-Invoke the agent-skills:code-review-and-quality skill.
+{{SKILLS}}
 
 Review the current changes (staged or recent commits) across all five axes:
 
@@ -23,3 +23,5 @@ Critical: N
 Important: N
 Suggestions: N
 Top issue: <one sentence, or "none">
+
+If Verdict is FAIL, the next build cycle must follow the `receiving-code-review` skill (`.spiq/skills/RECEIVING_CODE_REVIEW.md`) to triage and address findings by severity before resubmitting.
