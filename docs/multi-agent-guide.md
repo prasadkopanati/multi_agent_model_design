@@ -19,12 +19,13 @@ A comprehensive guide to using the `agenticspiq` system — an agentic coding wo
 
 ## Overview
 
-This system orchestrates **two CLI agents** through a **five-stage pipeline**:
+This system orchestrates **three CLI agents** through a **six-stage pipeline**:
 
 | Agent | Model | Role |
 |-------|-------|------|
-| **Controller (Claude)** | Claude Sonnet 4.5 | Spec, plan, review, failure analysis |
-| **Executor (OpenCode)** | Qwen3.5-27B | Build, test, fix loops |
+| **Controller (Claude)** | Claude Sonnet 4.6 | Spec, plan, review, failure analysis |
+| **Executor (OpenCode)** | Qwen3.5-plus | Build, test, fix loops |
+| **Finisher (Gemini)** | Gemini 2.5 Flash Preview | Final delivery — PR creation, merge, cleanup |
 
 ### Core Design Principle
 
@@ -43,25 +44,29 @@ orchestrator.js
       │     ├── review
       │     └── failure-analysis
       │
-      └── OpenCode (Executor)
-            ├── build
-            ├── test
-            └── fix loops
+      ├── OpenCode (Executor)
+      │     ├── build
+      │     ├── test
+      │     └── fix loops
+      │
+      └── Gemini (Finisher)
+            └── finish
 ```
 
 ### Pipeline Stages
 
 ```
-/spec → /plan → /build → /test → /review
+spec → plan → build → test → review → finish
 ```
 
 | Stage | Agent | Description |
 |-------|-------|-------------|
-| `/spec` | Claude | Generate structured specification |
-| `/plan` | Claude | Break work into verifiable tasks |
-| `/build` | OpenCode | Incremental TDD implementation |
-| `/test` | OpenCode | Test verification |
-| `/review` | Claude | Five-axis code review |
+| `spec` | Claude | Clarify requirements, then generate structured specification |
+| `plan` | Claude | Break work into verifiable tasks with dependency ordering |
+| `build` | OpenCode | Incremental TDD implementation + structured review request |
+| `test` | OpenCode | Test verification with confirmed pass/fail output |
+| `review` | Claude | Five-axis code review — PASS/FAIL verdict |
+| `finish` | Gemini | Final verification, delivery summary, PR/merge/cleanup |
 
 ---
 
@@ -83,12 +88,20 @@ claude login
 #### OpenCode CLI (Executor)
 ```bash
 # Install OpenCode CLI
-# (Follow installation instructions for your setup)
+npm install -g opencode
 
-# The CLI is pre-configured and authenticated
+opencode login   # or set OPENCODE_API_KEY in your environment
 ```
 
-**Note:** Both CLIs are designed to be pre-configured. Authentication is handled by the CLI itself — no manual API key configuration required.
+#### Gemini CLI (Finisher)
+```bash
+# Install Gemini CLI
+npm install -g @google/gemini-cli
+
+gemini   # first run will prompt for Google account authentication
+```
+
+**Note:** All three CLIs handle authentication themselves — no manual API key configuration required beyond the initial login flow.
 
 ### 2. Clone and Install `agenticspiq`
 
@@ -158,7 +171,11 @@ agenticspiq --help   # will error on unknown flag, but confirms the binary resol
 | `AGENT_BUILD` | Agent for build stage | `opencode` |
 | `AGENT_TEST` | Agent for test stage | `opencode` |
 | `AGENT_REVIEW` | Agent for review stage | `claude` |
+| `AGENT_FINISH` | Agent for finish stage | `gemini` |
 | `AGENT_FAILURE` | Agent for failure analysis | `claude` |
+| `FINISH_ACTION` | Delivery action for finish stage | `pr` |
+
+`FINISH_ACTION` values: `pr` (create pull request), `merge` (merge directly), `keep` (push branch only), `discard` (delete branch).
 
 ```bash
 # Example .env file
@@ -167,7 +184,9 @@ AGENT_PLAN=claude
 AGENT_BUILD=opencode
 AGENT_TEST=opencode
 AGENT_REVIEW=claude
+AGENT_FINISH=gemini
 AGENT_FAILURE=claude
+FINISH_ACTION=pr
 ```
 
 ### B. Per-Run User Inputs
@@ -378,11 +397,11 @@ Task 3: Implement JWT token generation
 
 ---
 
-### Stage 5: `/review`
+### Stage 5: `review`
 
 **Agent:** Claude (Controller)
 
-**Purpose:** Five-axis code review before merge.
+**Purpose:** Five-axis code review before delivery. Produces a PASS/FAIL verdict with categorized findings.
 
 **Review Axes:**
 1. Correctness
@@ -391,11 +410,31 @@ Task 3: Implement JWT token generation
 4. Security
 5. Performance
 
-**User Inputs:**
-- Review findings analysis
-- Decision on Critical/Important items
+**User Inputs:** None (automated). If verdict is FAIL, a retry cycle is triggered using the `receiving-code-review` skill to triage and address findings.
 
-**Output:** Review report with actionable items
+**Output:** Structured review report with PASS/FAIL verdict, Critical/Important/Suggestion counts, and file:line references.
+
+---
+
+### Stage 6: `finish`
+
+**Agent:** Gemini (Finisher)
+
+**Purpose:** Complete the development lifecycle after a PASS verdict — final verification, delivery summary, and workspace cleanup.
+
+**Process:**
+1. Run the final test suite and confirm it passes
+2. Produce a delivery summary from spec, commits, and review verdict
+3. Execute the delivery action set by `FINISH_ACTION`:
+   - `pr` — create a pull request (default)
+   - `merge` — merge directly into main
+   - `keep` — push branch without merging
+   - `discard` — delete branch (prints what will be lost first)
+4. Clean up the workspace
+
+**User Inputs:** None (automated). Set `FINISH_ACTION` before the run to control delivery behavior.
+
+**Output:** PR URL, merge confirmation, or branch status depending on `FINISH_ACTION`.
 
 ---
 
@@ -505,10 +544,12 @@ git worktree remove worktrees/wt-<id>
 
 - [ ] Claude CLI installed (`npm install -g @anthropic-ai/claude-code`)
 - [ ] Claude CLI authenticated (`claude login`)
-- [ ] OpenCode CLI installed and pre-configured
+- [ ] OpenCode CLI installed (`npm install -g opencode`) and authenticated
+- [ ] Gemini CLI installed (`npm install -g @google/gemini-cli`) and authenticated
 - [ ] `agenticspiq` linked globally (`npm link` from repo root)
 - [ ] `~/.npm-global/bin` on your `PATH`
 - [ ] `.env` file created from `.env.example`
+- [ ] `FINISH_ACTION` set to desired delivery method (`pr`, `merge`, `keep`, or `discard`)
 - [ ] Workspace directory ready
 - [ ] Feature request / user story prepared
 
@@ -516,9 +557,9 @@ git worktree remove worktrees/wt-<id>
 
 - [ ] Review generated SPEC.md before proceeding
 - [ ] Review task breakdown before build
-- [ ] Respond to any interactive prompts
-- [ ] Review test results
-- [ ] Review code review findings
+- [ ] Respond to any interactive prompts during build/test
+- [ ] Pipeline advances automatically through test → review → finish on success
+- [ ] Check the PR URL or branch status printed after the finish stage completes
 
 ---
 

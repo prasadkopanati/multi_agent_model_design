@@ -40,6 +40,7 @@ agentic-coding-template/
 │   ├── spec.md
 │   ├── test.md
 │   ├── review.md
+│   ├── finish.md
 │   ├── failure.md
 │   └── skills/
 │       ├── SKILLS.md
@@ -282,11 +283,13 @@ const OUTPUT_DIR   = path.join(__dirname, "..", "artifacts", "output");
 const TASKS_FILE   = path.join(__dirname, "..", "tasks.json");
 
 const DEFAULT_AGENTS = {
-  spec:   "claude",
-  plan:   "claude",
-  review: "claude",
-  build:  "opencode",
-  test:   "opencode",
+  spec:    "claude",
+  plan:    "claude",
+  review:  "claude",
+  finish:  "gemini",
+  failure: "claude",
+  build:   "opencode",
+  test:    "opencode",
 };
 
 function getAgentForStage(stage) {
@@ -341,11 +344,12 @@ function runStage(stage, workspace, context = {}) {
 }
 
 const PIPELINE = [
-  { stage: "spec",   contextKey: "spec"  },
-  { stage: "plan",   contextKey: "plan"  },
-  { stage: "build",  contextKey: "build" },
-  { stage: "test",   contextKey: "test"  },
-  { stage: "review", contextKey: null    },
+  { stage: "spec",   contextKey: "spec",   requiresApproval: true  },
+  { stage: "plan",   contextKey: "plan",   requiresApproval: true  },
+  { stage: "build",  contextKey: "build",  requiresApproval: false },
+  { stage: "test",   contextKey: "test",   requiresApproval: false },
+  { stage: "review", contextKey: "review", requiresApproval: false },
+  { stage: "finish", contextKey: null,     requiresApproval: false },
 ];
 
 function runPipeline(workspace) {
@@ -447,17 +451,17 @@ Error: repeated test failure
 # 🔁 9. Full System Behavior
 
 ```txt id="flow_final"
-spec → plan → build → test → review
-         ↓
-      failure
-         ↓
-   Claude analysis
-         ↓
-   retry (OpenCode)
-         ↓
-   repeat (max 3)
-         ↓
-   escalate → human
+spec → plan → build → test → review → finish
+                ↓
+             failure
+                ↓
+          Claude analysis
+                ↓
+          retry (OpenCode)
+                ↓
+          repeat (max 3)
+                ↓
+          escalate → human
 ```
 
 ---

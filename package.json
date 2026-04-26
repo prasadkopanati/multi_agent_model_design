@@ -1,7 +1,7 @@
 {
   "name": "agenticspiq",
   "version": "1.0.0",
-  "description": "A deterministic, multi-stage coding workflow powered by two CLI agents",
+  "description": "A deterministic, multi-stage coding workflow powered by three CLI agents",
   "main": "orchestrator/orchestrator.js",
   "bin": {
     "agent-cli": "./agent-cli/agent-cli.js",
