@@ -1,15 +1,19 @@
 ---
-description: Start spec-driven development — write a structured specification before writing code
+description: Start spec-driven development — clarify requirements, then write a structured specification before writing code
 ---
 
-Invoke the agent-skills:spec-driven-development skill.
+{{SKILLS}}
 
 The user's feature request is provided below:
 
 {{REQUEST}}
 
-Using the requirements above, generate a structured spec covering all six core areas: objective, commands, project structure, code style, testing strategy, and boundaries.
+**Before writing the spec**, follow the `brainstorming` skill (`.spiq/skills/BRAINSTORMING.md`):
+1. Read the requirements and identify any ambiguous, vague, or missing information
+2. Generate clarifying questions grouped by category (tech stack, users, scope, performance)
+3. Surface implicit assumptions you would otherwise bake into the spec
+4. If running autonomously (no human in the loop), document all assumptions and proceed with conservative defaults
 
-If any critical information is missing (tech stack, constraints, acceptance criteria), make reasonable assumptions and note them clearly in the spec.
+**Then write the spec** using the `spec-driven-development` skill (`.spiq/skills/SPEC_DRIVEN.md`), covering all six core areas: objective, commands, project structure, code style, testing strategy, and boundaries.
 
 Save the spec to: {{SPEC_FILE}}
