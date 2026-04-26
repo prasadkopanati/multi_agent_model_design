@@ -1,11 +1,12 @@
 # agenticspiq
 
-A deterministic, multi-stage coding workflow powered by two CLI agents:
+A deterministic, multi-stage coding workflow powered by three CLI agents:
 
 | Agent | CLI | Default model | Role |
 |---|---|---|---|
 | **Controller** | Claude Code | `sonnet` (Claude Sonnet 4.6) | Spec, plan, review, failure analysis |
 | **Executor** | OpenCode | `opencode/qwen3.5-plus` | Build, test, fix loops |
+| **Finisher** | Gemini CLI | `gemini-2.5-flash-preview` | Final delivery (finish stage) |
 
 The system is orchestrated via Node.js and improves over time via a structured failure-analysis loop.
 
@@ -21,13 +22,15 @@ The system is orchestrated via Node.js and improves over time via a structured f
 |---|---|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` |
 | [OpenCode CLI](https://opencode.ai) | `npm install -g opencode` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` |
 | Node.js ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Git | [git-scm.com](https://git-scm.com) |
 
-Log in to both CLIs before first use:
+Log in to all CLIs before first use:
 ```bash
 claude login
 opencode login   # or set OPENCODE_API_KEY in your environment
+gemini           # first run will prompt for Google account auth
 ```
 
 ### Install agenticspiq
@@ -85,7 +88,7 @@ echo "Build a REST API with JWT auth and a PostgreSQL backend" | agenticspiq
 
 1. Create `.spiq/` in your workspace (all framework state is isolated here)
 2. Source or create `req.md` from your requirements document
-3. Run the pipeline: **spec → plan → build → test → review**
+3. Run the pipeline: **spec → plan → build → test → review → finish**
 4. Pause after spec and plan for your approval before continuing
 
 Add `.spiq/` to your project's `.gitignore`:
@@ -108,12 +111,16 @@ AGENT_PLAN=claude
 AGENT_BUILD=opencode
 AGENT_TEST=opencode
 AGENT_REVIEW=claude
+AGENT_FINISH=gemini
 AGENT_FAILURE=claude
 
 # Model per agent CLI
-CLAUDE_MODEL=sonnet              # Claude Code --model flag (e.g. sonnet, opus, haiku)
+CLAUDE_MODEL=sonnet                    # Claude Code --model flag (e.g. sonnet, opus, haiku)
 OPENCODE_MODEL=opencode/qwen3.5-plus   # OpenCode -m flag
 GEMINI_MODEL=gemini-2.5-flash-preview  # Gemini CLI --model flag
+
+# Finish stage delivery action (pr | merge | keep | discard)
+FINISH_ACTION=pr
 ```
 
 Override a single model for one run:
@@ -126,16 +133,17 @@ CLAUDE_MODEL=opus agenticspiq --workspace /my/project
 ## 🔄 Pipeline
 
 ```
-spec → plan → build → test → review
+spec → plan → build → test → review → finish
 ```
 
-| Stage | Agent | Approval required |
-|---|---|---|
-| spec | Claude (Controller) | ✅ yes — reviews SPEC.md |
-| plan | Claude (Controller) | ✅ yes — reviews tasks/plan.md |
-| build | OpenCode (Executor) | no |
-| test | OpenCode (Executor) | no |
-| review | Claude (Controller) | no |
+| Stage | Agent | Approval required | Output |
+|---|---|---|---|
+| spec | Claude (Controller) | ✅ yes — reviews SPEC.md | `.spiq/SPEC.md` |
+| plan | Claude (Controller) | ✅ yes — reviews tasks/plan.md | `.spiq/tasks/plan.md` |
+| build | OpenCode (Executor) | no | committed code + review request |
+| test | OpenCode (Executor) | no | verified test results |
+| review | Claude (Controller) | no | PASS/FAIL verdict |
+| finish | Gemini (Finisher) | no | PR / merge / branch kept |
 
 Artifacts from each stage are stored in `.spiq/` and passed as context to the next stage.
 
@@ -170,20 +178,23 @@ Your existing project structure is **never touched** outside of `.spiq/`.
 ```
 bin/agenticspiq.js
       │
-      ├── utils/scaffold.js          ← first-run setup (.spiq/, req.md)
+      ├── utils/scaffold.js          ← first-run setup (.spiq/, req.md, skills/)
       │
       └── orchestrator/orchestrator.js
             │
             ├── Claude Code (Controller)
             │     ├── spec   → .spiq/SPEC.md
             │     ├── plan   → .spiq/tasks/plan.md
-            │     ├── review
+            │     ├── review → PASS/FAIL verdict
             │     └── failure-analysis
             │
-            └── OpenCode (Executor)
-                  ├── build
-                  ├── test
-                  └── fix loops (up to retry_limit)
+            ├── OpenCode (Executor)
+            │     ├── build  → code + review request
+            │     ├── test   → verified test results
+            │     └── fix loops (up to retry_limit)
+            │
+            └── Gemini (Finisher)
+                  └── finish → PR / merge / branch kept
 ```
 
 ### Key modules
@@ -230,9 +241,9 @@ Triggered automatically when:
 
 | Role | Default | Override via |
 |---|---|---|
-| Controller (spec/plan/review) | Claude Sonnet 4.6 (`sonnet`) | `CLAUDE_MODEL` |
+| Controller (spec/plan/review/failure) | Claude Sonnet 4.6 (`sonnet`) | `CLAUDE_MODEL` |
 | Executor (build/test) | Qwen3.5-plus (`opencode/qwen3.5-plus`) | `OPENCODE_MODEL` |
-| Gemini (optional) | Gemini 2.5 Flash Preview | `GEMINI_MODEL` |
+| Finisher (finish) | Gemini 2.5 Flash Preview | `GEMINI_MODEL` |
 
 To switch the controller to Opus for a harder task:
 ```bash
@@ -278,7 +289,7 @@ Git worktrees can be used for isolated execution per task (see `worktrees/` in t
 - CI auto-fix loop
 - Failure memory dataset for fine-tuning
 - Dynamic model routing based on task complexity
-- Parallel task execution
+- True parallel subprocess dispatch (infrastructure for `dispatching-parallel-agents` skill)
 
 ---
 

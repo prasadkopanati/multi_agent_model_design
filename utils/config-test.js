@@ -8,7 +8,7 @@ const { runClaude }   = require("../agent-cli/runners/claude");
 const { runOpenCode } = require("../agent-cli/runners/opencode");
 const { runGemini }   = require("../agent-cli/runners/gemini");
 
-const STAGE_AGENTS = ["AGENT_SPEC", "AGENT_PLAN", "AGENT_BUILD", "AGENT_TEST", "AGENT_REVIEW", "AGENT_FAILURE"];
+const STAGE_AGENTS = ["AGENT_SPEC", "AGENT_PLAN", "AGENT_BUILD", "AGENT_TEST", "AGENT_REVIEW", "AGENT_FINISH", "AGENT_FAILURE"];
 
 const MODEL_DEFAULTS = {
   claude:   "sonnet",

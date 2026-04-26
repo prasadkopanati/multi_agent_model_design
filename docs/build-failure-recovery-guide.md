@@ -165,6 +165,10 @@ current_stage = "build"
   → run build stage with inherited context
 ```
 
+The full pipeline order is: `spec (0) → plan (1) → build (2) → test (3) → review (4) → finish (5)`.
+
+To resume from a specific stage, set `current_stage` to that stage name and re-run. All prior stage artifacts must be present in `.spiq/artifacts/output/`.
+
 `current_stage` is written at the **start** of each stage (before execution), so a failure always leaves it pointing at the failed stage — making automatic resume work correctly on the next run.
 
 ---
@@ -179,3 +183,5 @@ current_stage = "build"
 | `.spiq/artifacts/compiled/build.md` | Compiled prompt that was sent to the build agent |
 | `.spiq/artifacts/output/spec.json` | Spec context reloaded on resume |
 | `.spiq/artifacts/output/plan.json` | Plan context reloaded on resume |
+| `.spiq/artifacts/output/review.json` | Review verdict — passed to finish stage as context |
+| `.spiq/artifacts/output/finish.json` | Finish stage output — PR URL or delivery status |

@@ -21,7 +21,7 @@ function main() {
   const { agent, stage, input, output, workspace } = args;
 
   if (!agent || !stage) {
-    console.error("Usage: agent-cli --agent <claude|opencode> --stage <stage> [--input <file>] [--output <file>] [--workspace <path>]");
+    console.error("Usage: agent-cli --agent <claude|opencode|gemini> --stage <stage> [--input <file>] [--output <file>] [--workspace <path>]");
     process.exit(1);
   }
 
