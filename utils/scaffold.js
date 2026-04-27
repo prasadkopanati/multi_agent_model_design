@@ -53,6 +53,30 @@ const CANDIDATE_NAMES = [
   "docs/requirements.md",
 ];
 
+function assertSpiqNotIgnored(workspace) {
+  const gitDir = path.join(workspace, ".git");
+  if (!fs.existsSync(gitDir)) return;
+
+  const check = spawnSync("git", ["check-ignore", "-q", ".spiq"], { cwd: workspace });
+  if (check.status !== 0) return;
+
+  console.error(`
+Error: .spiq/ is excluded by your .gitignore (or a parent ignore rule).
+
+The agenticspiq pipeline requires all agents to read and write files inside
+.spiq/ (spec, plan, skills, task artifacts). Ignoring it breaks the pipeline.
+
+To fix:
+  1. Open the .gitignore in your workspace: ${path.join(workspace, ".gitignore")}
+  2. Remove or comment out any line that matches .spiq/, .spiq, or a wildcard
+     that covers it (e.g. .*).
+  3. Re-run agenticspiq.
+
+Note: .spiq/ is intentionally tracked — it holds pipeline state, not build output.
+`);
+  process.exit(1);
+}
+
 async function ensureDirs(workspace) {
   const spiqDir = path.join(workspace, ".spiq");
   for (const dir of SPIQ_DIRS) {
@@ -126,18 +150,21 @@ async function ensureRequirements(workspace, opts = {}) {
 
 function ensureSkills(workspace) {
   const dest = path.join(workspace, ".spiq", "skills");
-  if (fs.existsSync(dest)) return;
   fs.mkdirSync(dest, { recursive: true });
   for (const f of fs.readdirSync(SKILLS_SRC)) {
     if (!f.endsWith(".md")) continue;
-    const raw   = fs.readFileSync(path.join(SKILLS_SRC, f), "utf-8");
-    const clean = stripFrontmatter(raw);   // strip YAML so agents never see ---name:--- directives
-    fs.writeFileSync(path.join(dest, f), clean);
+    const raw      = fs.readFileSync(path.join(SKILLS_SRC, f), "utf-8");
+    const clean    = stripFrontmatter(raw);   // strip YAML so agents never see ---name:--- directives
+    const destFile = path.join(dest, f);
+    if (!fs.existsSync(destFile) || fs.readFileSync(destFile, "utf-8") !== clean) {
+      fs.writeFileSync(destFile, clean);
+    }
   }
 }
 
 async function scaffold(workspace, opts = {}) {
   await ensureDirs(workspace);
+  assertSpiqNotIgnored(workspace);
   ensureSkills(workspace);
   await ensureRequirements(workspace, opts);
 }

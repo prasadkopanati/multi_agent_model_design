@@ -281,6 +281,7 @@ Automate this with git hooks:
 - **Commit generated files** only if the project expects them (e.g., `package-lock.json`, Prisma migrations)
 - **Don't commit** build output (`dist/`, `.next/`), environment files (`.env`), or IDE config (`.vscode/settings.json` unless shared)
 - **Have a `.gitignore`** that covers: `node_modules/`, `dist/`, `.env`, `.env.local`, `*.pem`
+- **Never add `.spiq/` to `.gitignore`.** The `.spiq/` directory contains pipeline state — spec, plan, skills, and task artifacts — that every agent in the pipeline must be able to read and write. Treat it like source code, not a build artifact.
 
 ## Using Git for Debugging
 
@@ -320,6 +321,7 @@ git log --grep="validation" --oneline
 - Formatting changes mixed with behavior changes
 - No `.gitignore` in the project
 - Committing `node_modules/`, `.env`, or build artifacts
+- `.spiq/` added to `.gitignore` — breaks agent access to pipeline state
 - Long-lived branches that diverge significantly from main
 - Force-pushing to shared branches
 

@@ -1,5 +1,8 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
+
+const POLICY_FILE = path.join(__dirname, "..", "..", "policies", "yolo-allow-shell.toml");
 
 function runGemini(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
@@ -7,6 +10,7 @@ function runGemini(stage, input, output, workspace) {
   const model = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
   const result = spawnSync("gemini", [
     "--approval-mode", "yolo",
+    "--policy", POLICY_FILE,
     "--model", model,
     "-p", ""
   ], {
@@ -24,6 +28,7 @@ function runGemini(stage, input, output, workspace) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`gemini exited with status ${result.status}`);
 
+  fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, result.stdout);
 }
 
