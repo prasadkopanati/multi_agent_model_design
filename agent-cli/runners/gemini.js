@@ -15,8 +15,9 @@ function runGemini(stage, input, output, workspace) {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       ...process.env,
-      GIT_AUTHOR_NAME:  "Gemini Agent",
-      GIT_AUTHOR_EMAIL: "gemini-agent@agenticspiq.local",
+      GIT_AUTHOR_NAME:              "Gemini Agent",
+      GIT_AUTHOR_EMAIL:             "gemini-agent@agenticspiq.local",
+      GEMINI_CLI_TRUST_WORKSPACE:   "true",
     },
   });
 

@@ -5,29 +5,22 @@ const path = require("path");
 const AGENTICSPIQ_NODE_MODULES = path.join(__dirname, "..", "..", "node_modules");
 const AGENTICSPIQ_BIN = path.join(AGENTICSPIQ_NODE_MODULES, ".bin");
 
+const OPENCODE_MODEL = process.env.OPENCODE_MODEL || "opencode/qwen3.5-plus";
+
 const OPENCODE_CONFIG = JSON.stringify({
   compaction: {
     auto: true,
     prune: true,
     reserved: 20000,
   },
-  provider: {
-    opencode: {
-      options: {
-        setCacheKey: true,
-      },
-    },
-  },
 });
 
 function runOpenCode(stage, input, output, workspace) {
   const prompt = fs.readFileSync(input, "utf-8");
-
-  const model = process.env.OPENCODE_MODEL || "opencode/qwen3.5-plus";
   const result = spawnSync("opencode", [
     "run",
     "--dangerously-skip-permissions",
-    "--model", model,
+    "--model", OPENCODE_MODEL,
     "Execute the stage instructions."
   ], {
     cwd: workspace,
