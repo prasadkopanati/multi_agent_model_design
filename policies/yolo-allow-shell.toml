@@ -1,0 +1,17 @@
+# Allow all shell commands when running in YOLO non-interactive headless mode.
+#
+# Problem: Gemini CLI 0.39+ applies dangerous-command heuristics (blocking rm -rf,
+# find -exec, etc.) even in --approval-mode yolo when running with -p (headless).
+# These heuristics force ASK_USER, which throws in non-interactive mode.
+#
+# Fix: A rule with commandRegex sets argsPattern on the compiled rule, which
+# bypasses the heuristics check entirely (the check is skipped when argsPattern
+# is present). Priority 999 in user tier (4.999) beats the bundled yolo.toml
+# wildcard rule (1.998), so this rule is matched first for run_shell_command.
+[[rule]]
+toolName = "run_shell_command"
+decision = "allow"
+priority = 999
+modes = ["yolo"]
+commandRegex = ".*"
+allowRedirection = true

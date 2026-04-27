@@ -14,12 +14,12 @@ function load(file) {
 
 const STAGE_SKILLS = {
   spec:    ["SKILLS.md", "SPEC_DRIVEN.md", "BRAINSTORMING.md"],
-  plan:    ["SKILLS.md", "PLANNING.md"],
-  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WEB_DEV.md", "THEME_FACTORY.md", "WEB_ARTIFACTS.md", "CONTENT_CREATION.md", "API_DESIGN.md", "DATABASE.md", "DOCKER.md", "PDF.md", "GIT.md", "REQUESTING_CODE_REVIEW.md", "DISPATCHING_PARALLEL_AGENTS.md"],
-  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md", "WEB_DEV.md", "WEB_ARTIFACTS.md", "API_TESTING.md", "VERIFICATION_BEFORE_COMPLETION.md"],
+  plan:    ["SKILLS.md", "PLANNING.md", "TEST_DRIVEN.md", "PLAN_QUALITY_GATE.md", "DISPATCHING_PARALLEL_AGENTS.md"],
+  build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WEB_DEV.md", "THEME_FACTORY.md", "WEB_ARTIFACTS.md", "CONTENT_CREATION.md", "API_DESIGN.md", "DATABASE.md", "DOCKER.md", "PDF.md", "GIT.md", "REQUESTING_CODE_REVIEW.md", "EXECUTION_DISCIPLINE.md", "BUILD_HANDOFF_SUMMARY.md"],
+  test:    ["SKILLS.md", "TEST_DRIVEN.md", "BROWSER_TESTING.md", "WEB_DEV.md", "WEB_ARTIFACTS.md", "API_TESTING.md", "VERIFICATION_BEFORE_COMPLETION.md", "BUILD_HANDOFF_SUMMARY.md"],
   review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md", "RECEIVING_CODE_REVIEW.md"],
-  finish:  ["SKILLS.md", "FINISHING_BRANCH.md"],
-  failure: ["SKILLS.md", "DEBUGGING.md"],
+  finish:  ["SKILLS.md", "FINISHING_BRANCH.md", "SPEC_TRACED_DELIVERY.md", "PIPELINE_INTEGRITY_CHECK.md"],
+  failure: ["SKILLS.md", "DEBUGGING.md", "FAILURE_CONTEXT_CONTINUITY.md"],
 };
 
 // Parse name + description from a skill file's frontmatter
@@ -46,7 +46,7 @@ function compileSkills(stage) {
   return [
     "## Available Skills",
     "",
-    "The following skills provide detailed guidance. Read the relevant `.spiq/skills/` file before beginning each task:",
+    "The following skills provide detailed guidance. Read the relevant `.spiq/skills/` file using the `read_file` tool. Do not call `activate_skill` — it does not support these skill names.",
     "",
     entries.join("\n"),
   ].join("\n");
