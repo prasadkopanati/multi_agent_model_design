@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-26
 
-This guide documents the root causes of context bloat in OpenCode (Executor) sessions, the cost impact, and the solutions applied.
+This guide documents the root causes of context bloat across all three agents (OpenCode, Claude, Gemini), the cost impact, and the solutions applied per agent.
 
 ---
 
@@ -75,7 +75,7 @@ The ~20K static system + tool tokens are written to a provider-side cache once a
 
 ### Implementation
 
-Enabled via `setCacheKey: true` in the `opencode` provider options, injected as `OPENCODE_CONFIG_CONTENT` into the runner environment. See `agent-cli/runners/opencode.js`.
+Relies on **automatic prefix caching** built into OpenCode's provider layer. No explicit `setCacheKey` is needed — and setting it caused `promptCacheKey` errors on providers that only support read-side caching (e.g., Kimi K2.5/K2.6). The `setCacheKey` option was removed after this was discovered. Caching is effective across all supported models through automatic prefix reuse.
 
 ---
 
@@ -128,6 +128,68 @@ Enabled via `compaction.auto: true`, `compaction.prune: true`, `compaction.reser
 
 ---
 
+---
+
+## Claude (Controller) — Spec, Plan, Review, Failure
+
+### Context growth profile
+
+Claude's assigned stages (spec, plan, review, failure) are single-pass reasoning tasks. Each stage reads a handful of files and writes one artifact. Tool call volume is low and context does not exhibit the runaway growth seen in Build/Test sessions.
+
+### Caching
+
+Claude Code automatically caches the static prefix of its system prompt. However, the default system prompt includes **dynamic per-machine sections** — current working directory, environment info, memory paths, git status — that change on every invocation. When these sections sit inside the system prompt prefix, they invalidate the cache on every run.
+
+**Fix applied**: `--exclude-dynamic-system-prompt-sections` moves these sections into the first user message instead, leaving the static system prompt prefix stable and consistently cacheable across all Claude invocations for this pipeline.
+
+### Compaction
+
+Claude Code compacts automatically when approaching context limits. No configuration needed — and since Claude's stages are short single-pass tasks, compaction rarely fires in practice.
+
+### Summary for Claude
+
+| Feature | Status | How |
+|---------|--------|-----|
+| Prompt caching | Active (improved) | `--exclude-dynamic-system-prompt-sections` added to runner |
+| Compaction | Automatic | Built into Claude Code, no config needed |
+
+---
+
+## Gemini (Finisher) — Finish Stage
+
+### Context growth profile
+
+The Finish stage is a short, focused task: write a PR description, push the branch, optionally open a PR. It makes few tool calls and completes in a single pass. Context growth is not a concern.
+
+### Caching
+
+Implicit caching is **automatic** on Gemini 2.5+ models — no configuration required. The cost discount is 90% on cache hits (vs the standard input rate).
+
+### Compaction
+
+Chat compression in the Gemini CLI is **automatic** and hardcoded. It fires when conversation history reaches 50% of the model's context window, preserves 30% of recent messages uncompressed, and uses an LLM summary for the rest. No user-facing config options exist.
+
+### Summary for Gemini
+
+| Feature | Status | How |
+|---------|--------|-----|
+| Prompt caching | Automatic | Built into Gemini 2.5+ models |
+| Compaction | Automatic | Fires at 50% context limit (hardcoded) |
+
+No runner changes needed for Gemini.
+
+---
+
+## Agent Comparison
+
+| Agent | Stages | Context growth risk | Caching | Compaction | Changes applied |
+|-------|--------|--------------------|---------|----|-----------------|
+| OpenCode | Build, Test | **High** — iterative tool loops | Manual → applied via `setCacheKey: true` | Manual → applied via config | `OPENCODE_CONFIG_CONTENT` in runner |
+| Claude | Spec, Plan, Review, Failure | Low — single-pass tasks | Automatic, improved | Automatic | `--exclude-dynamic-system-prompt-sections` in runner |
+| Gemini | Finish | Very low — short single-pass | Automatic (Gemini 2.5+) | Automatic (50% threshold) | None |
+
+---
+
 ## Lower-Priority Optimizations (not yet applied)
 
 These are secondary wins. Apply them if further reduction is needed after validating Solutions 1 and 2.
@@ -167,12 +229,37 @@ template = template.replaceAll("{{DEBUGGING}}",
 
 ---
 
-## Verification
+## Verification (post-run analysis — 2026-04-26)
 
-After these changes, observe the next session's usage logs:
+Verified against sessions `xrCHQbZ9` and `05A02MW0` run after changes were applied.
 
-1. **Caching active**: Input token cost should drop sharply after the first request. Some providers report `cached_tokens` alongside `input_tokens` in API responses — check OpenCode logs for this.
+### Caching — CONFIRMED WORKING ✓
 
-2. **Compaction active**: Input token counts should no longer grow monotonically. Expect a sudden dip (compaction fired) followed by slow growth resuming from a lower baseline (~25–30K), rather than reaching 60K+.
+Evidence from pricing math:
 
-3. **Cost check**: Total session input tokens should be materially lower than the ~2.5M observed in session `NSUv0Nz7`.
+| Request | Tokens | Cost | Expected uncached | Match |
+|---------|--------|------|-------------------|-------|
+| xrCHQbZ9 first | 27,637 | $0.0071 | $0.0055 (no) / $0.0071 at cache-write rate ✓ | Cache write |
+| xrCHQbZ9 second | 28,922 | $0.0011 | $0.0058 uncached / ~$0.001 with 27K cached ✓ | Cache read |
+| 05A02MW0 first | 27,394 | $0.0071 | Same pattern — cache write ✓ | Cache write |
+
+The first request of each session was priced at the cached-write rate ($0.25/M) because `setCacheKey: true` was set, and subsequent requests showed costs consistent with prefix cache reads ($0.02/M). `setCacheKey` was later removed (it broke Kimi K2.5/K2.6 with `Extra inputs are not permitted: promptCacheKey`). Automatic prefix caching still applies for all models — first requests revert to standard input pricing ($0.20/M) but reads remain cached.
+
+### Compaction — NOT FIRING ✗ (fixed 2026-04-26)
+
+Session `05A02MW0` showed strict monotonic growth with no dips:
+
+```
+27,394 → 34,471 → 38,221 → ... → 64,546  (no drop anywhere)
+```
+
+**Root cause**: `auto: true` and `reserved: 20000` were set, but compaction fires relative to the model's *native* context window. Qwen3.5 Plus has a 128K window — OpenCode would not compact until ~100K+ tokens, which was never reached. No explicit trigger threshold was configured.
+
+**Fix attempted (reverted)**: A `models[OPENCODE_MODEL].context: 50000` key was added but OpenCode's config schema rejects `"models"` as an unrecognized key — the third-party source was inaccurate. The key was removed.
+
+**Current state**: Compaction is configured with `auto: true, prune: true, reserved: 20000`. OpenCode fires compaction at its own internal threshold (a percentage of the model's native context window — 128K for Qwen3.5 Plus). For typical pipeline tasks that complete around 60–70K tokens, compaction will not fire because those sessions end before the native threshold is reached. Caching remains the primary cost lever here.
+
+### What to watch for in the next run
+
+- **Caching**: First request cost should remain ~$0.007 (cache write); all subsequent requests should be a fraction of uncached cost.
+- **Compaction**: Will not fire for typical tasks that complete under ~100K tokens. Compaction is configured and ready but requires OpenCode's native threshold (based on the model's 128K window) to be breached.

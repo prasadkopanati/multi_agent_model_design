@@ -62,7 +62,7 @@ async function checkConfig() {
     const model = process.env[MODEL_VARS[agent]] || MODEL_DEFAULTS[agent];
 
     try {
-      runner("check", inputFile, outputFile, process.cwd());
+      runner("check", inputFile, outputFile, tmpDir);
       results.push({ agent, model, ok: true });
     } catch (err) {
       results.push({ agent, model, ok: false, error: err.message });

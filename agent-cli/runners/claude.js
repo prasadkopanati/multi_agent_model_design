@@ -13,6 +13,7 @@ function runClaude(stage, input, output, workspace) {
     "-p", "Execute the stage instructions above.",
     "--model", model,
     "--output-format", "json",
+    "--exclude-dynamic-system-prompt-sections",
   ], {
     cwd: workspace,
     input: prompt,
