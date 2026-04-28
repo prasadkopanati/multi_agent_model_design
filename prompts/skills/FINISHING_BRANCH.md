@@ -87,6 +87,23 @@ Check the `FINISH_ACTION` environment variable. If not set, default to `pr`.
 
 ### Step 4: Execute the Delivery Action
 
+**No-Remote Guard (check before any push):**
+
+Before executing any push, verify a remote is configured:
+
+```bash
+git remote get-url origin 2>/dev/null
+```
+
+If this returns empty (no remote configured):
+
+- For `keep`: Do not attempt a push. Print:
+  `Branch preserved locally (no remote configured). Set GIT_REMOTE_URL in .env and re-run to push.`
+  Write the delivery summary and exit normally — this is not a failure.
+- For `pr` or `merge`: Stop. Print:
+  `Delivery blocked: no remote configured. Set GIT_REMOTE_URL in .env before running agenticspiq, or push manually.`
+  Do NOT attempt to create a PR or merge.
+
 **`pr` — Create a pull request**
 
 ```bash

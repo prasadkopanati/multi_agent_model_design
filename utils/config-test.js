@@ -1,3 +1,4 @@
+const { spawnSync } = require("child_process");
 const fs   = require("fs");
 const os   = require("os");
 const path = require("path");
@@ -45,6 +46,12 @@ async function checkConfig() {
   console.log("Checking agent configuration...\n");
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "spiq-check-"));
+  // Make tmpDir a git root so OpenCode's workspace discovery stays bounded here
+  // and doesn't walk up to a parent repo (which could contain thousands of files).
+  spawnSync("git", ["init", "--quiet"], { cwd: tmpDir, stdio: "ignore" });
+  spawnSync("git", ["config", "user.email", "check@agenticspiq.local"], { cwd: tmpDir, stdio: "ignore" });
+  spawnSync("git", ["config", "user.name",  "agenticspiq-check"],       { cwd: tmpDir, stdio: "ignore" });
+
   const inputFile  = path.join(tmpDir, "prompt.md");
   const outputFile = path.join(tmpDir, "output.json");
 
@@ -62,7 +69,15 @@ async function checkConfig() {
     const model = process.env[MODEL_VARS[agent]] || MODEL_DEFAULTS[agent];
 
     try {
-      runner("check", inputFile, outputFile, tmpDir);
+      if (agent === "opencode") {
+        // OpenCode always does full workspace discovery regardless of prompt;
+        // just verify the binary is available — API connectivity is tested on first pipeline run.
+        const r = spawnSync("opencode", ["--version"], { stdio: "pipe" });
+        if (r.error) throw r.error;
+        if (r.status !== 0) throw new Error(`opencode exited with status ${r.status}`);
+      } else {
+        runner("check", inputFile, outputFile, tmpDir);
+      }
       results.push({ agent, model, ok: true });
     } catch (err) {
       results.push({ agent, model, ok: false, error: err.message });

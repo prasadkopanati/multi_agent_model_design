@@ -4,6 +4,11 @@ description: Implement the next task incrementally — write failing tests first
 
 {{SKILLS}}
 
+**Context budget — follow these rules on every command or costs spiral:**
+- Append `2>&1 | tail -50` to all test/build/lint commands. If the output is insufficient to diagnose a failure, re-run with `tail -100` or higher.
+- Read skill files only when the task explicitly requires that skill. Each file at most once.
+- Read source files using `offset` + `limit` parameters — never the entire file unless you are about to write to it.
+
 Before writing any code, read `.spiq/skills/EXECUTION_DISCIPLINE.md` and declare your execution scope.
 
 Pick the next pending task from the plan. For each task:
