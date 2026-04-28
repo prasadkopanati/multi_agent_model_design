@@ -101,6 +101,12 @@ function printReviewSummary(rawOutput) {
   }
 }
 
+function isReviewPass(rawOutput) {
+  if (!rawOutput) return false;
+  const text = extractText(rawOutput);
+  return /verdict\s*:\s*pass/i.test(text);
+}
+
 function writePlanArtifacts(cfg, rawOutput) {
   try {
     const text = extractText(rawOutput);
@@ -179,6 +185,15 @@ async function runPipeline(workspace) {
       if (stage === "plan")   writePlanArtifacts(cfg, output);
       if (stage === "review") printReviewSummary(output);
       if (contextKey) context = { ...context, [contextKey]: output };
+    }
+
+    if (stage === "review" && !isReviewPass(output)) {
+      console.log("⛔ Review verdict is FAIL. Pipeline stopped. Fix issues and re-run from the build stage.");
+      updateCurrentStage("build", cfg);
+      const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
+      task.human_required = true;
+      fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
+      process.exit(1);
     }
 
     if (requiresApproval) {

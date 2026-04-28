@@ -8,6 +8,12 @@ The user's feature request is provided below:
 
 {{REQUEST}}
 
+**Step 0 — Challenge the framing**
+
+Read `.spiq/skills/SPEC_CEO_CHALLENGE.md` and apply all five forcing questions to the request above before doing anything else. Record each answer explicitly. Add the `CHALLENGED PREMISES` section to the Assumption Register you will produce in Step 1.
+
+This step costs one pass of reasoning before any spec is written. The alternative — discovering a misframed request at the review stage — costs a full pipeline cycle.
+
 **Step 1 — Brainstorm and surface ambiguities**
 
 Read `.spiq/skills/BRAINSTORMING.md` and apply it to the request above. Specifically:
