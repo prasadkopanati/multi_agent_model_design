@@ -17,7 +17,14 @@ For bug fixes (Prove-It pattern):
 5. Run the full test suite for regressions
 
 For frontend/browser output (any HTML, CSS, or JS files):
-1. Serve the page locally (e.g. `npx serve .` or `python3 -m http.server`) or use a `file://` path
+1. Serve the page locally or use a `file://` path. When starting a background server, **always redirect output** so the process fully detaches:
+   ```bash
+   python3 -m http.server 8000 > /dev/null 2>&1 &
+   SERVER_PID=$!
+   # ... run tests ...
+   kill $SERVER_PID 2>/dev/null
+   ```
+   Without `> /dev/null 2>&1`, the background process keeps stdout/stderr pipes open and the bash tool hangs until timeout.
 2. Run a Playwright smoke check to verify real browser rendering:
    - If a `playwright.config.*` exists: `npx playwright test`
    - Otherwise, run an inline smoke script:

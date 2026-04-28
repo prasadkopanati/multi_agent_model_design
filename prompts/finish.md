@@ -4,6 +4,15 @@ description: Complete the development lifecycle — final verification, delivery
 
 {{SKILLS}}
 
+> **HARD STOP CHECK**: Before doing anything else, read the Review output below.
+> If it contains `Verdict: FAIL` or lists any critical or important issues:
+> - Print: "FINISH BLOCKED: Review verdict is FAIL. Pipeline cannot proceed to delivery."
+> - List the critical and important findings from the review output.
+> - Do NOT write any code. Do NOT edit any files. Do NOT run tests. Do NOT create a PR.
+> - Exit immediately.
+>
+> Only continue past this point if the review verdict is PASS with zero critical issues.
+
 The review stage returned a PASS verdict. The pipeline is ready for delivery.
 
 Spec: {{SPEC_FILE}}
