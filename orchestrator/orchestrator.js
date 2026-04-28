@@ -7,6 +7,8 @@ const { compilePrompt } = require("./promptCompiler");
 const { captureFailure } = require("./failure");
 const { retryStage } = require("./retry");
 const { makeWorkspaceConfig } = require("./workspace-config");
+const { persistSession } = require("../utils/persist-session");
+const { resetWorkspace } = require("../utils/reset-workspace");
 
 const DEFAULT_AGENTS = {
   spec:    "claude",
@@ -206,7 +208,28 @@ async function runPipeline(workspace) {
   }
 
   updateCurrentStage("complete", cfg);
-  console.log("✅ Pipeline complete");
+
+  try {
+    const vaultFile = persistSession(workspace, cfg);
+    console.log(`📦 Session archived → ${vaultFile}`);
+  } catch (err) {
+    console.warn(`⚠  Session archive skipped: ${err.message}`);
+  }
+
+  await new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question("Clean .spiq/ for next run? [y/N] ", (answer) => {
+      rl.close();
+      if (answer.trim().toLowerCase() === "y") {
+        resetWorkspace(workspace, cfg);
+        console.log(".spiq/ reset to initial state.");
+      } else {
+        console.log(".spiq/ kept as-is.");
+      }
+      console.log("✅ Pipeline complete.");
+      resolve();
+    });
+  });
 }
 
 module.exports = { runStage, runPipeline };

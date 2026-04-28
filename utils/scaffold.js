@@ -96,6 +96,15 @@ async function ensureDirs(workspace) {
     spawnSync("git", ["config", "user.name",  "agenticspiq-agent"], { cwd: workspace });
     spawnSync("git", ["config", "user.email", "agent@agenticspiq.local"], { cwd: workspace });
   }
+
+  const remoteUrl = process.env.GIT_REMOTE_URL;
+  if (remoteUrl) {
+    const existing = spawnSync("git", ["remote", "get-url", "origin"], { cwd: workspace });
+    if (existing.status !== 0) {
+      spawnSync("git", ["remote", "add", "origin", remoteUrl], { cwd: workspace });
+      console.log(`Git remote configured: ${remoteUrl}`);
+    }
+  }
 }
 
 async function ensureRequirements(workspace, opts = {}) {

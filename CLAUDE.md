@@ -148,6 +148,7 @@ Models are configured via environment variables in `.env`:
 | `GEMINI_MODEL` | `gemini-2.5-flash-preview` | `agent-cli/runners/gemini.js` |
 | `AGENT_FINISH` | `gemini` | `orchestrator/orchestrator.js` |
 | `FINISH_ACTION` | `pr` | `prompts/skills/FINISHING_BRANCH.md` — `pr`, `merge`, `keep`, or `discard` |
+| `GIT_REMOTE_URL` | _(unset)_ | `utils/scaffold.js` — added as `origin` when agenticspiq initializes git and no remote exists; ignored if origin already configured |
 
 Override at runtime: `CLAUDE_MODEL=opus agenticspiq`
 

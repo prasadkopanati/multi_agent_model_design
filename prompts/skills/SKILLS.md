@@ -41,6 +41,7 @@ This system provides the following skills for agent operations. Skills are injec
 ## Lifecycle Skills
 
 - **finishing-a-development-branch** — Final verification, delivery summary, PR/merge/keep/discard, workspace cleanup
+- **session-persistence** — Documents where completed pipeline runs are archived (prompt_vault/) and how to reference prior sessions or winning prompts
 
 ## Using Skills
 

@@ -11,12 +11,25 @@ const OPENCODE_CONFIG = JSON.stringify({
   compaction: {
     auto: true,
     prune: true,
-    reserved: 20000,
+    reserved: 5000,
   },
 });
 
 function runOpenCode(stage, input, output, workspace) {
-  const prompt = fs.readFileSync(input, "utf-8");
+  const prompt  = fs.readFileSync(input, "utf-8");
+  const isCheck = stage === "check";
+
+  const env = {
+    ...process.env,
+    PATH:            `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
+    NODE_PATH:       `${AGENTICSPIQ_NODE_MODULES}${path.delimiter}${process.env.NODE_PATH || ""}`,
+    GIT_AUTHOR_NAME: "OpenCode Agent",
+    GIT_AUTHOR_EMAIL:"opencode-agent@agenticspiq.local",
+  };
+  if (!isCheck) {
+    env.OPENCODE_CONFIG_CONTENT = OPENCODE_CONFIG;
+  }
+
   const result = spawnSync("opencode", [
     "run",
     "--dangerously-skip-permissions",
@@ -26,14 +39,7 @@ function runOpenCode(stage, input, output, workspace) {
     cwd: workspace,
     input: prompt,
     stdio: ["pipe", "pipe", "inherit"],
-    env: {
-      ...process.env,
-      PATH:                    `${AGENTICSPIQ_BIN}${path.delimiter}${process.env.PATH}`,
-      NODE_PATH:               `${AGENTICSPIQ_NODE_MODULES}${path.delimiter}${process.env.NODE_PATH || ""}`,
-      GIT_AUTHOR_NAME:         "OpenCode Agent",
-      GIT_AUTHOR_EMAIL:        "opencode-agent@agenticspiq.local",
-      OPENCODE_CONFIG_CONTENT: OPENCODE_CONFIG,
-    },
+    env,
   });
 
 
