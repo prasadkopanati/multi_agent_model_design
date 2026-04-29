@@ -20,6 +20,7 @@ const DEFAULT_AGENTS = {
   failure: "claude",
   build:   "opencode",
   test:    "opencode",
+  fix:     "opencode",
 };
 
 function getAgentForStage(stage) {
@@ -525,13 +526,44 @@ async function runPipeline(workspace) {
       const pass = isReviewPass(output);
       appendEvent(cfg, "review_verdict", stage, { verdict: pass ? "pass" : "fail" });
       if (!pass) {
-        console.log("⛔ Review verdict is FAIL. Pipeline stopped. Fix issues and re-run from the build stage.");
-        updateCurrentStage("build", cfg);
-        const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
-        task.human_required = true;
+        let task;
+        try { task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8")); } catch { task = {}; }
+        const retryLimit = task.retry_limit ?? 3;
+        const fixAttempts = task.fix_attempts ?? 0;
+
+        if (fixAttempts >= retryLimit) {
+          console.log(`⛔ Review failed after ${retryLimit} fix attempt(s). Human intervention required.`);
+          task.human_required = true;
+          fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
+          process.exit(1);
+        }
+
+        task.fix_attempts = fixAttempts + 1;
         fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
-        process.exit(1);
+
+        console.log(`\n🔧 Review FAIL — running targeted fix (attempt ${fixAttempts + 1}/${retryLimit})...`);
+        appendEvent(cfg, "stage_start", "fix");
+        runStage("fix", workspace, context, cfg);
+        appendEvent(cfg, "stage_complete", "fix");
+
+        console.log(`\n🧪 Re-running test after fix...`);
+        appendEvent(cfg, "stage_start", "test");
+        runStage("test", workspace, context, cfg);
+        const fixTestOutput = readOutputArtifact("test", cfg);
+        if (fixTestOutput) context = { ...context, test: fixTestOutput };
+        appendEvent(cfg, "stage_complete", "test");
+
+        console.log(`\n🔍 Re-running review...`);
+        updateCurrentStage("review", cfg);
+        i--;
+        continue;
       }
+      // Review passed — reset fix attempt counter for this run
+      try {
+        const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
+        task.fix_attempts = 0;
+        fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
+      } catch { /* non-fatal */ }
     }
 
     if (requiresApproval) {

@@ -8,6 +8,7 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const { runClaude }   = require("../agent-cli/runners/claude");
 const { runOpenCode } = require("../agent-cli/runners/opencode");
 const { runGemini }   = require("../agent-cli/runners/gemini");
+const { runOpenClaude } = require("../agent-cli/runners/openclaude");
 
 const STAGE_AGENTS = ["AGENT_SPEC", "AGENT_PLAN", "AGENT_BUILD", "AGENT_TEST", "AGENT_REVIEW", "AGENT_FINISH", "AGENT_FAILURE"];
 
@@ -15,18 +16,21 @@ const MODEL_DEFAULTS = {
   claude:   "sonnet",
   opencode: "opencode/qwen3.5-plus",
   gemini:   "gemini-2.5-flash-preview",
+  openclaude: "sonnet",
 };
 
 const MODEL_VARS = {
   claude:   "CLAUDE_MODEL",
   opencode: "OPENCODE_MODEL",
   gemini:   "GEMINI_MODEL",
+  openclaude: "OPENCLAUDE_MODEL",
 };
 
 const RUNNERS = {
   claude:   runClaude,
   opencode: runOpenCode,
   gemini:   runGemini,
+  openclaude: runOpenClaude,
 };
 
 const TEST_PROMPT = 'Reply with only the word "ok".\n';

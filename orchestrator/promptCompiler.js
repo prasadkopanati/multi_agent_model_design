@@ -22,6 +22,7 @@ const BASE_SKILLS = {
   review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md", "RECEIVING_CODE_REVIEW.md"],
   finish:  ["SKILLS.md", "FINISHING_BRANCH.md", "SPEC_TRACED_DELIVERY.md", "PIPELINE_INTEGRITY_CHECK.md", "DOCUMENTATION_RELEASE.md", "POST_DEPLOY_CANARY.md"],
   failure: ["SKILLS.md", "FAILURE_INVESTIGATION.md", "DEBUGGING.md", "FAILURE_CONTEXT_CONTINUITY.md"],
+  fix:     ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "DEBUGGING.md", "GIT.md", "EXECUTION_DISCIPLINE.md"],
 };
 
 // Task-type-specific skills. Selected by brainstorm/spec/plan agents and injected into

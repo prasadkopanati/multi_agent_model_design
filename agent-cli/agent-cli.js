@@ -6,6 +6,7 @@ const fs            = require("fs");
 const { runClaude } = require("./runners/claude");
 const { runOpenCode } = require("./runners/opencode");
 const { runGemini } = require("./runners/gemini");
+const { runOpenClaude } = require("./runners/openclaude");
 
 const { values: args } = parseArgs({
   options: {
@@ -21,7 +22,7 @@ function main() {
   const { agent, stage, input, output, workspace } = args;
 
   if (!agent || !stage) {
-    console.error("Usage: agent-cli --agent <claude|opencode|gemini> --stage <stage> [--input <file>] [--output <file>] [--workspace <path>]");
+    console.error("Usage: agent-cli --agent <claude|opencode|gemini|openclaude> --stage <stage> [--input <file>] [--output <file>] [--workspace <path>]");
     process.exit(1);
   }
 
@@ -36,6 +37,8 @@ function main() {
       runOpenCode(stage, input || defaultInput, output || defaultOutput, workspace);
     } else if (agent === "gemini") {
       runGemini(stage, input || defaultInput, output || defaultOutput, workspace);
+    } else if (agent === "openclaude") {
+      runOpenClaude(stage, input || defaultInput, output || defaultOutput, workspace);
     } else {
       console.error(`Unknown agent: ${agent}`);
       process.exit(1);
