@@ -187,6 +187,16 @@ function setupWorktree(workspace, cfg) {
     return null;
   }
 
+  // Keep .spiq-worktree out of git status in the main workspace
+  try {
+    const gitignorePath = path.join(workspace, ".gitignore");
+    const entry = ".spiq-worktree\n";
+    const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, "utf-8") : "";
+    if (!existing.includes(".spiq-worktree")) {
+      fs.appendFileSync(gitignorePath, (existing.endsWith("\n") || existing === "") ? entry : `\n${entry}`);
+    }
+  } catch { /* non-fatal */ }
+
   // Symlink .spiq/ into worktree so agents can access skills, prompts, state, etc.
   const worktreeSpiq = path.join(worktreePath, ".spiq");
   if (!fs.existsSync(worktreeSpiq)) {

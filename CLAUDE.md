@@ -156,6 +156,9 @@ Models are configured via environment variables in `.env`:
 | `AGENT_FINISH` | `gemini` | `orchestrator/orchestrator.js` |
 | `FINISH_ACTION` | `pr` | `prompts/skills/FINISHING_BRANCH.md` — `pr`, `merge`, `keep`, or `discard` |
 | `GIT_REMOTE_URL` | _(unset)_ | `utils/scaffold.js` — added as `origin` when agenticspiq initializes git and no remote exists; ignored if origin already configured |
+| `TAVILY_API_KEY` | _(unset)_ | `prompts/skills/RESEARCH.md` — web search during plan Step 0 |
+| `FIRECRAWL_API_KEY` | _(unset)_ | `prompts/skills/RESEARCH.md` — page fetch/crawl during plan Step 0 |
+| `APIFY_TOKEN` | _(unset)_ | `prompts/skills/RESEARCH.md` — platform scraping during plan Step 0 |
 
 Override at runtime: `CLAUDE_MODEL=opus agenticspiq`
 

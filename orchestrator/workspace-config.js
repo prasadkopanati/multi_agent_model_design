@@ -16,7 +16,7 @@ function makeWorkspaceConfig(workspace) {
     specFile:       path.join(stateDir, "SPEC.md"),
     planFile:       path.join(stateDir, "tasks", "plan.md"),
     planDir:        path.join(stateDir, "tasks"),
-    worktreePath:   path.join(stateDir, "worktree"),
+    worktreePath:   path.join(workspace, ".spiq-worktree"),
   };
 }
 

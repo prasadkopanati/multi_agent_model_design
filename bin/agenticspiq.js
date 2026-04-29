@@ -22,6 +22,14 @@ async function main() {
     return;
   }
 
+  if (rawArgs[0] === "--changemodel" || rawArgs[0] === "changemodel") {
+    const { changeModel } = require("../utils/changemodel");
+    const envPath = path.join(__dirname, "..", ".env");
+    await changeModel(envPath, rawArgs.slice(1));
+    process.exit(0);
+    return;
+  }
+
   // Extract --workspace (default: cwd)
   const wsIdx = rawArgs.findIndex(a => a === "--workspace");
   const workspace = wsIdx !== -1 ? rawArgs[wsIdx + 1] : process.cwd();
