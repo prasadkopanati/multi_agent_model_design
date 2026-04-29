@@ -17,6 +17,7 @@ The review stage returned a PASS verdict. The pipeline is ready for delivery.
 
 Spec: {{SPEC_FILE}}
 Review output: {{REVIEW}}
+Feature branch: {{FEATURE_BRANCH}}
 
 Follow the `finishing-a-development-branch` skill (`.spiq/skills/FINISHING_BRANCH.md`) to:
 

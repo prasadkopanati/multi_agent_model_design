@@ -13,6 +13,15 @@ async function main() {
     return;
   }
 
+  if (rawArgs[0] === "--doctor" || rawArgs[0] === "doctor") {
+    const wsIdx2 = rawArgs.findIndex(a => a === "--workspace");
+    const doctorWorkspace = wsIdx2 !== -1 ? rawArgs[wsIdx2 + 1] : process.cwd();
+    const { runDoctor } = require("../utils/doctor");
+    await runDoctor(doctorWorkspace);
+    process.exit(0);
+    return;
+  }
+
   // Extract --workspace (default: cwd)
   const wsIdx = rawArgs.findIndex(a => a === "--workspace");
   const workspace = wsIdx !== -1 ? rawArgs[wsIdx + 1] : process.cwd();
