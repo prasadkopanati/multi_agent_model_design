@@ -13,6 +13,7 @@ This is an **agentic coding system** that orchestrates a deterministic, multi-st
 | **Controller** | Claude Code (configurable via `CLAUDE_MODEL`, default `sonnet`) | Spec, plan, review, failure analysis |
 | **Executor** | OpenCode (configurable via `OPENCODE_MODEL`, default `opencode/qwen3.5-plus`) | Build, test, fix loops |
 | **Finisher** | Gemini CLI (configurable via `GEMINI_MODEL`, default `gemini-2.5-flash-preview`) | Finish stage — delivery, PR creation, cleanup |
+| **Alt Controller** | OpenClaude (configurable via `OPENCLAUDE_MODEL`, default `sonnet`) | Drop-in alternative to Claude Code; supports OpenAI-compatible, Gemini, Ollama, and other providers |
 
 ### Core Design Principle
 
@@ -48,6 +49,10 @@ bin/agenticspiq.js
 
 ```
 spec → plan → build → test → review → finish
+                                 │
+                              [FAIL]
+                                 ↓
+                        fix (executor) → test → review  (loops up to retry_limit)
 ```
 
 Each stage:
@@ -73,6 +78,7 @@ Each stage:
 | `agent-cli/runners/claude.js` | Claude Code runner (model from `CLAUDE_MODEL`) |
 | `agent-cli/runners/opencode.js` | OpenCode runner (model from `OPENCODE_MODEL`) |
 | `agent-cli/runners/gemini.js` | Gemini runner (model from `GEMINI_MODEL`) |
+| `agent-cli/runners/openclaude.js` | OpenClaude runner (model from `OPENCLAUDE_MODEL`) |
 | `prompts/*.md` | Stage prompt templates (spec, plan, build, test, review, finish, failure) |
 | `prompts/skills/` | Reusable skill modules (SKILLS.md, DEBUGGING.md, GIT.md, and 6 new superpowers-inspired skills) |
 
@@ -126,7 +132,7 @@ All agents are invoked via `agent-cli/agent-cli.js`:
 
 ```bash
 node agent-cli/agent-cli.js \
-  --agent <claude|opencode|gemini> \
+  --agent <claude|opencode|gemini|openclaude> \
   --stage <stage> \
   --input <absolute-path-to-compiled-prompt> \
   --output <absolute-path-for-json-output> \
@@ -146,6 +152,7 @@ Models are configured via environment variables in `.env`:
 | `CLAUDE_MODEL` | `sonnet` | `agent-cli/runners/claude.js` |
 | `OPENCODE_MODEL` | `opencode/qwen3.5-plus` | `agent-cli/runners/opencode.js` |
 | `GEMINI_MODEL` | `gemini-2.5-flash-preview` | `agent-cli/runners/gemini.js` |
+| `OPENCLAUDE_MODEL` | `sonnet` | `agent-cli/runners/openclaude.js` |
 | `AGENT_FINISH` | `gemini` | `orchestrator/orchestrator.js` |
 | `FINISH_ACTION` | `pr` | `prompts/skills/FINISHING_BRANCH.md` — `pr`, `merge`, `keep`, or `discard` |
 | `GIT_REMOTE_URL` | _(unset)_ | `utils/scaffold.js` — added as `origin` when agenticspiq initializes git and no remote exists; ignored if origin already configured |

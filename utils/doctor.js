@@ -5,11 +5,12 @@ const { spawnSync } = require("child_process");
 
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
-const REQUIRED_ENV = ["CLAUDE_MODEL", "OPENCODE_MODEL", "GEMINI_MODEL"];
+const REQUIRED_ENV = ["CLAUDE_MODEL", "OPENCODE_MODEL", "GEMINI_MODEL", "OPENCLAUDE_MODEL"];
 const TOOLS = [
   { name: "claude",   cmd: ["claude", "--version"] },
   { name: "opencode", cmd: ["opencode", "--version"] },
   { name: "gemini",   cmd: ["gemini", "--version"] },
+  { name: "openclaude", cmd: ["openclaude", "--version"] },
 ];
 
 const COL = 36;
