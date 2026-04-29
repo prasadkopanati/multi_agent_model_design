@@ -16,7 +16,7 @@ function load(file) {
 const BASE_SKILLS = {
   brainstorm: ["SKILLS.md", "INTERACTIVE_CLARIFICATION.md"],
   spec:    ["SKILLS.md", "SPEC_CEO_CHALLENGE.md", "SPEC_DRIVEN.md", "BRAINSTORMING.md"],
-  plan:    ["SKILLS.md", "PLANNING.md", "TEST_DRIVEN.md", "PLAN_QUALITY_GATE.md", "DISPATCHING_PARALLEL_AGENTS.md"],
+  plan:    ["SKILLS.md", "RESEARCH.md", "PLANNING.md", "TEST_DRIVEN.md", "PLAN_QUALITY_GATE.md", "DISPATCHING_PARALLEL_AGENTS.md"],
   build:   ["SKILLS.md", "INCREMENTAL_IMPLEMENTATION.md", "TEST_DRIVEN.md", "DEBUGGING.md", "WIP_CHECKPOINT.md", "GIT.md", "REQUESTING_CODE_REVIEW.md", "EXECUTION_DISCIPLINE.md", "BUILD_HANDOFF_SUMMARY.md"],
   test:    ["SKILLS.md", "TEST_DRIVEN.md", "VERIFICATION_BEFORE_COMPLETION.md", "WIP_CHECKPOINT.md", "BUILD_HANDOFF_SUMMARY.md"],
   review:  ["SKILLS.md", "CODE_REVIEW.md", "SECURITY.md", "PERFORMANCE.md", "RECEIVING_CODE_REVIEW.md"],
@@ -104,6 +104,22 @@ function compileSkillCatalog() {
   ].join("\n");
 }
 
+const HANDOFF_CHAR_LIMIT = 2500;
+const REVIEW_CHAR_LIMIT  = 4000;
+
+function truncate(text, limit, hint) {
+  if (!text || text.length <= limit) return text || "";
+  return `${text.slice(0, limit)}\n\n_[Truncated — full content available at ${hint}]_`;
+}
+
+function compileHandoff(handoff) {
+  return truncate(handoff, HANDOFF_CHAR_LIMIT, "`.spiq/handoff.md`");
+}
+
+function compileReview(review) {
+  return truncate(review, REVIEW_CHAR_LIMIT, "`.spiq/artifacts/output/review.json`");
+}
+
 function compilePrompt(stage, context = {}) {
   let template = fs.readFileSync(path.join(PROMPTS_DIR, `${stage}.md`), "utf-8");
 
@@ -119,11 +135,11 @@ function compilePrompt(stage, context = {}) {
   template = template.replaceAll("{{SPEC}}",             context.spec             || "");
   template = template.replaceAll("{{BUILD}}",            context.build            || "");
   template = template.replaceAll("{{TEST}}",             context.test             || "");
-  template = template.replaceAll("{{REVIEW}}",           context.review           || "");
+  template = template.replaceAll("{{REVIEW}}",           compileReview(context.review));
   template = template.replaceAll("{{SPEC_FILE}}",        context.specFile         || "SPEC.md");
   template = template.replaceAll("{{PLAN_FILE}}",        context.planFile         || "tasks/plan.md");
   template = template.replaceAll("{{PLAN_DIR}}",         context.planDir          || "tasks");
-  template = template.replaceAll("{{HANDOFF}}",          context.handoff          || "");
+  template = template.replaceAll("{{HANDOFF}}",          compileHandoff(context.handoff));
   template = template.replaceAll("{{FEATURE_BRANCH}}",   context.featureBranch    || "");
 
   return template;

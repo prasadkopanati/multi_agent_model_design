@@ -6,6 +6,20 @@ description: Break work into small verifiable tasks with acceptance criteria, TD
 
 Read the existing spec ({{SPEC_FILE}}) and the relevant codebase sections. Then follow these steps:
 
+**Step 0 — Research** _(mandatory when the feature touches external APIs, libraries, platforms, or data the executor cannot be expected to know)_
+
+Read `.spiq/skills/RESEARCH.md` now. Then:
+
+1. Identify every knowledge gap the executor will face: unknown APIs, third-party SDKs, platform behaviours, data formats, or real-world constraints not described in the spec.
+2. For each gap, run a targeted query using Tavily, Firecrawl, or Apify (decision framework is in RESEARCH.md).
+3. Compile all findings into a `## RESEARCH CONTEXT` section at the top of `{{PLAN_FILE}}` using the format in RESEARCH.md.
+
+If no external knowledge is needed (pure refactoring, existing patterns only), write:
+```
+## RESEARCH CONTEXT
+_Not required — task uses only existing codebase patterns._
+```
+
 **Step 1 — Dependency graph**
 Identify all components and their dependencies. Determine which can be built in parallel (no shared dependency) and which must be sequential.
 
