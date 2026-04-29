@@ -2,6 +2,8 @@
 description: Implement the next task incrementally — write failing tests first, then implement to pass them, then commit
 ---
 
+{{HANDOFF}}
+
 {{SKILLS}}
 
 **Context budget — follow these rules on every command or costs spiral:**

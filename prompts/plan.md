@@ -54,5 +54,27 @@ Before saving the plan, run all five gates from `.spiq/skills/PLAN_QUALITY_GATE.
 
 Include the PLAN QUALITY GATE RESULT block at the top of plan.md before the task list.
 
+**Step 7 — Finalise skill selection**
+
+The build and test stages will only receive skills you confirm here. Use the catalog
+below to finalise the list from what brainstorm and spec proposed.
+
+{{SKILL_CATALOG}}
+
+{{BRAINSTORM_SKILLS}}
+
+Rules:
+- Include every skill the build or test stages will directly exercise
+- Remove any that do not apply to this specific task (no padding)
+- 4 instead of 2 is fine; 7 instead of 2 is not
+- Lean toward fewer — bloat slows the executor
+
+Output this line immediately before the PLAN QUALITY GATE RESULT block in plan.md.
+The orchestrator parses it; the format must be exact:
+
+```
+SELECTED_SKILLS: ["WEB_DEV", "API_DESIGN", "DATABASE"]
+```
+
 Save the plan to: {{PLAN_FILE}}
 Save the task list to: {{PLAN_DIR}}/todo.md
