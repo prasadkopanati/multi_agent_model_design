@@ -39,8 +39,16 @@ For each issue, in order of severity:
 2. Apply the minimal change that resolves the issue
 3. Do NOT touch code outside the files mentioned in the review issues — surgical changes only
 4. Run the relevant test(s) to confirm the fix does not introduce regressions
-5. Commit each logical fix:
-   `fix(<scope>): <what was wrong and what was changed>`
+
+After ALL fixes are applied and the full test suite is green, stage and commit everything in one shot:
+```bash
+git add -A
+git status --short          # verify the staged set is correct before committing
+git commit -m "fix(<scope>): <summary of all issues resolved>"
+git log --oneline -3        # confirm the commit appears in the log
+```
+
+Do NOT commit file-by-file or use selective `git add <path>`. Using `git add -A` ensures no changed file is left unstaged.
 
 **Step 3 — Output a FIX SUMMARY**
 

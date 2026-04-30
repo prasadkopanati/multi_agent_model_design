@@ -208,14 +208,28 @@ function setupWorktree(workspace, cfg) {
     }
   } catch { /* non-fatal */ }
 
-  // Symlink .spiq/ into worktree so agents can access skills, prompts, state, etc.
+  // Copy .spiq/ into worktree so agents can access skills, prompts, and state.
+  // We copy rather than symlink because Gemini CLI resolves symlinks for path security
+  // and blocks access to files whose resolved path falls outside the worktree boundary.
   const worktreeSpiq = path.join(worktreePath, ".spiq");
-  if (!fs.existsSync(worktreeSpiq)) {
-    try {
-      fs.symlinkSync(cfg.stateDir, worktreeSpiq);
-    } catch (err) {
-      console.warn(`⚠  Could not symlink .spiq into worktree: ${err.message}`);
+  try {
+    fs.mkdirSync(worktreeSpiq, { recursive: true });
+    // Copy skills directory so all agents (including Gemini) can read skill files directly.
+    const skillsSrc = path.join(cfg.stateDir, "skills");
+    if (fs.existsSync(skillsSrc)) {
+      fs.cpSync(skillsSrc, path.join(worktreeSpiq, "skills"), { recursive: true });
     }
+    // Copy state files agents need to read.
+    for (const rel of ["SPEC.md", "tasks/plan.md", "handoff.md"]) {
+      const src = path.join(cfg.stateDir, rel);
+      if (fs.existsSync(src)) {
+        const dst = path.join(worktreeSpiq, rel);
+        fs.mkdirSync(path.dirname(dst), { recursive: true });
+        fs.copyFileSync(src, dst);
+      }
+    }
+  } catch (err) {
+    console.warn(`⚠  Could not copy .spiq into worktree: ${err.message}`);
   }
 
   return branchName;
@@ -564,6 +578,12 @@ async function runPipeline(workspace) {
         fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
 
         console.log(`\n🔧 Review FAIL — running targeted fix (attempt ${fixAttempts + 1}/${retryLimit})...`);
+
+        // Reset any uncommitted changes left by a prior fix attempt so each attempt
+        // starts from a clean committed state and changes don't silently accumulate.
+        const execWs = context.execWorkspace || workspace;
+        spawnSync("git", ["-C", execWs, "reset", "--hard", "HEAD"], { stdio: "inherit" });
+
         appendEvent(cfg, "stage_start", "fix");
         runStage("fix", workspace, context, cfg);
         appendEvent(cfg, "stage_complete", "fix");
