@@ -138,6 +138,7 @@ function compilePrompt(stage, context = {}) {
   template = template.replaceAll("{{REVIEW}}",           compileReview(context.review));
   template = template.replaceAll("{{SPEC_FILE}}",        context.specFile         || "SPEC.md");
   template = template.replaceAll("{{PLAN_FILE}}",        context.planFile         || "tasks/plan.md");
+  template = template.replaceAll("{{TODO_FILE}}",        context.todoFile         || "tasks/todo.md");
   template = template.replaceAll("{{PLAN_DIR}}",         context.planDir          || "tasks");
   template = template.replaceAll("{{HANDOFF}}",          compileHandoff(context.handoff));
   template = template.replaceAll("{{FEATURE_BRANCH}}",   context.featureBranch    || "");
