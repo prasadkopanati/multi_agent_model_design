@@ -11,7 +11,7 @@ const OPENCODE_CONFIG = JSON.stringify({
   compaction: {
     auto: true,
     prune: true,
-    reserved: 5000,
+    reserved: 25000,  // trigger compaction at ~81% of 131K window, not ~96%
   },
 });
 

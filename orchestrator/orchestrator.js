@@ -125,6 +125,17 @@ function writePlanArtifacts(cfg, rawOutput) {
   }
 }
 
+function writeHandoffArtifact(cfg, rawOutput) {
+  try {
+    const text = extractText(rawOutput);
+    if (!text) return;
+    // Prefer the structured handoff block; fall back to the full output text.
+    const match = text.match(/BUILD HANDOFF SUMMARY[\s\S]*/i);
+    const content = (match ? match[0] : text).trim();
+    if (content) fs.writeFileSync(cfg.handoffFile, content);
+  } catch { /* non-fatal */ }
+}
+
 function extractSelectedSkills(rawOutput) {
   if (!rawOutput) return [];
   try {
@@ -500,12 +511,12 @@ async function runPipeline(workspace) {
       }
     }
 
-    // Inject handoff from prior failed run into the first build attempt
-    if (stage === "build" && !context.handoff) {
+    // Inject handoff into build (prior failed run) and test (build output) stages
+    if ((stage === "build" || stage === "test") && !context.handoff) {
       const handoff = loadHandoff(cfg);
       if (handoff) {
         context = { ...context, handoff };
-        console.log("📋 Prior handoff context injected into build stage.");
+        if (stage === "build") console.log("📋 Prior handoff context injected into build stage.");
         appendEvent(cfg, "handoff_injected", stage);
       }
     }
@@ -526,6 +537,7 @@ async function runPipeline(workspace) {
           console.warn("⚠  No SELECTED_SKILLS found in plan — build/test will use base skills only.");
         }
       }
+      if (stage === "build") writeHandoffArtifact(cfg, output);
       if (stage === "review") printReviewSummary(output);
       if (contextKey) context = { ...context, [contextKey]: output };
     }
