@@ -59,3 +59,20 @@ For frontend/browser output (any HTML, CSS, or JS files):
 4. Do NOT fall back to "manual browser verification" — if Playwright is unavailable, report it as a blocked test
 
 For browser-related issues, also invoke agent-skills:browser-testing-with-devtools to verify with Chrome DevTools MCP.
+
+## Uncommitted-Changes Gate
+
+Before writing the build handoff summary or declaring the test stage complete, run:
+
+```bash
+git status --short | grep -v '^?? \.spiq'
+```
+
+If this produces **any output** (staged or unstaged changes to source files):
+
+1. Print: `TEST BLOCKED: uncommitted source changes detected.`
+2. List the affected files.
+3. Do NOT write the handoff summary.
+4. Do NOT declare the stage complete.
+
+The fix stage is required to commit all changes with `git add -A` before the test stage can pass. A test run on uncommitted code does not represent the deliverable state.

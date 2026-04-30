@@ -160,14 +160,15 @@ Always print what is being discarded before executing.
 
 ### Step 5: Clean Up the Workspace
 
+**SAFETY**: Only remove `.spiq/` build artifacts. Never delete `src/`, `tests/`,
+`node_modules/`, or any project source directory. The worktree directory is removed
+by the orchestrator after you exit — do NOT run `git worktree remove` yourself.
+
 After delivery:
 
 ```bash
 # Remove .spiq/ build artifacts (keep the workspace clean for the next run)
 # Note: do NOT remove .spiq/tasks.json — it holds pipeline state for resume
-
-# If using git worktrees, remove the feature worktree
-git worktree remove [worktree-path] --force
 
 # Return to main branch if on a feature branch
 git checkout main

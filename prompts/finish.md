@@ -13,6 +13,11 @@ description: Complete the development lifecycle — final verification, delivery
 >
 > Only continue past this point if the review verdict is PASS with zero critical issues.
 
+> **WORKSPACE SAFETY RULE**: Never delete `src/`, `tests/`, or any source code directory.
+> The only files you may remove are `.spiq/` build artifacts — and only after the delivery
+> action (PR / merge / push) has completed successfully. The worktree directory is cleaned
+> up by the orchestrator after you exit; do NOT run `git worktree remove` yourself.
+
 The review stage returned a PASS verdict. The pipeline is ready for delivery.
 
 Spec: {{SPEC_FILE}}

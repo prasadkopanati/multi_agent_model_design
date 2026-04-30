@@ -1,13 +1,16 @@
-# Build and Test Stage Deviation Guide
+# Build, Test, Fix, and Finish Stage Deviation Guide
 
 > Created: 2026-04-30 — based on live agent output analysis across a full build → test pipeline run
+> Updated: 2026-04-30 — extended with fix and finish stage deviations from two review-FAIL retry sessions
 
-This guide documents every systematic deviation observed when the executor agent (OpenCode / Qwen3.5) ran through a complete build stage and into the test stage. Each issue is traced to its root cause in a prompt or runtime configuration, the fix applied is shown, and any remaining gaps are recorded as future improvements.
+This guide documents every systematic deviation observed across the full pipeline — build, test, fix, review retry, and finish stages. Each issue is traced to its root cause in a prompt or runtime configuration, the fix applied is shown, and any remaining gaps are recorded as future improvements.
 
-The guide is split by severity across both stages:
+The guide is split by severity across all stages:
 
 - [Build Stage Issues](#build-stage-issues) — what the agent did wrong, why, and what changed
 - [Test Stage Issues](#test-stage-issues) — summary with links to the deeper dedicated guide
+- [Fix Stage Issues](#fix-stage-issues) — deviations observed during the review-FAIL → fix retry loop
+- [Finish Stage Issues](#finish-stage-issues) — Gemini-specific failures in the delivery stage
 - [Fixes Summary](#fixes-summary) — all files changed and what each change addresses
 - [Verification Checklist](#verification-checklist) — how to confirm fixes are working in a new run
 - [Future Improvements](#future-improvements) — remaining gaps not yet addressed in code
@@ -554,6 +557,7 @@ Brief summary of the seven issues and their status:
 | 5 | Qwen3.5 SWA KV cache invalidation — full prompt re-processing at every turn | Architecture | Partially mitigated — smaller initial context reduces frequency; model-level issue |
 | 6 | Handoff file never written to disk — `{{HANDOFF}}` always empty | Critical | Fixed — `writeHandoffArtifact()` added to orchestrator post-build; skill updated to require direct `write_file` |
 | 7 | 26,613 token initial context — test stage starts near SWA checkpoint boundary | Architecture | Documented — ~20K is unavoidable OpenCode overhead; see Future Improvements |
+| T1 | Test stage ran tests on uncommitted code without detecting it — no git status check | High | Fixed — Uncommitted-Changes Gate added to `prompts/test.md`; blocks handoff summary if working tree is dirty |
 
 ### Why these issues compound
 
@@ -563,15 +567,290 @@ Issues 5 and 7 are hardware/model-architecture constraints rather than prompt en
 
 ---
 
+## Fix Stage Issues
+
+> Source: session_1.md and session_2.md — two consecutive Review FAIL → fix → test → review retry cycles
+
+### CRITICAL
+
+---
+
+#### F1 — Fix stage attempt 1 made zero commits
+
+**Severity:** Critical — test stage ran against entirely uncommitted code; audit trail is broken.
+
+**What was observed:**
+
+The fix agent (OpenCode / Qwen3.5) edited 7+ files (`checkpoint.ts`, `scrape.ts`, `discover.ts`, `fuzzy.ts`, `rank.ts`, `rank.test.ts`, `scrape.test.ts`), ran the full test suite (49 tests pass), ran `npx tsc --noEmit` (clean), and then exited without calling `git add` or `git commit` once. The test stage that followed saw 15 modified files — a mix of staged and unstaged changes — with no new commit in the git log.
+
+**Root cause:**
+
+`prompts/fix.md` Step 2 item 5 read:
+
+```
+5. Commit each logical fix:
+   `fix(<scope>): <what was wrong and what was changed>`
+```
+
+This instruction is ambiguous in two ways: "each logical fix" implies per-fix commits (which the agent then skipped when all fixes were applied at once), and there is no `git add` command specified. The agent applied all fixes in one pass, never received an explicit "now run `git add -A && git commit`" instruction, and exited.
+
+**Fix applied — `prompts/fix.md`:**
+
+Step 2 item 5 replaced with a mandatory end-of-fix commit block:
+
+```markdown
+After ALL fixes are applied and the full test suite is green, stage and commit everything in one shot:
+\```bash
+git add -A
+git status --short          # verify the staged set is correct before committing
+git commit -m "fix(<scope>): <summary of all issues resolved>"
+git log --oneline -3        # confirm the commit appears in the log
+\```
+
+Do NOT commit file-by-file or use selective `git add <path>`. Using `git add -A` ensures no changed file is left unstaged.
+```
+
+`git add -A` (not selective staging) is required so that every modified tracked file — including files the agent touched indirectly — is included.
+
+---
+
+#### F2 — Fix stage attempt 2 committed partially — 7 files left uncommitted
+
+**Severity:** Critical — the committed state diverged from what the review was evaluating; delivery would miss changes.
+
+**What was observed:**
+
+The second fix attempt committed `804886e` with the message "fix: resolve code review issues — firecrawl success check, fuzzy threshold normalization, budget throw on overdraft, rank Set dedup + double-count fix, tavily spread order, redundant budget assert, unused param, test isolation." But `git status` after the commit still showed 7 files modified and unstaged:
+
+```
+ M src/clients/apify.ts
+ M src/pipeline/output.ts
+ M src/pipeline/rank.test.ts
+ M src/pipeline/scrape.test.ts
+ M src/utils/checkpoint.ts
+ M src/utils/markdown.ts
+ M tsconfig.json
+```
+
+These were uncommitted edits from **fix attempt 1** (F1) that were never cleaned up. When attempt 2 committed, it selectively staged only its own new changes and left the accumulated dirty state from attempt 1 behind.
+
+**Root cause:**
+
+Same root cause as F1 (no `git add -A`), compounded by the O1 issue below — the working tree was not reset between attempts, so attempt 1's uncommitted changes blended into attempt 2's workspace. Attempt 2 used selective `git add` and missed the leftover files.
+
+**Fix applied:** Same as F1 (`git add -A` in `fix.md`). Fully resolved only when combined with the O1 fix below.
+
+---
+
+### HIGH
+
+---
+
+#### O1 — No working-tree reset between fix attempts; dirty state accumulates
+
+**Severity:** High — each fix attempt inherits uncommitted changes from all prior attempts, causing cross-contamination of changes and partial commits.
+
+**What was observed:**
+
+Between attempt 1 (which left 15 uncommitted files) and attempt 2 (which started the fix stage), no `git reset`, `git stash`, or `git checkout -- .` was run. Attempt 2's fix agent operated on top of attempt 1's dirty working tree. The commit from attempt 2 captured some — but not all — of the accumulated edits because the agent used selective staging and did not know which files came from which attempt.
+
+**Root cause:**
+
+The fix loop in `orchestrator/orchestrator.js` (lines ~566–581) increments `fix_attempts`, runs the fix stage, runs the test stage, then loops back to review. There was no working-tree cleanup step between iterations:
+
+```js
+console.log(`\n🔧 Review FAIL — running targeted fix (attempt ${fixAttempts + 1}/${retryLimit})...`);
+appendEvent(cfg, "stage_start", "fix");
+runStage("fix", workspace, context, cfg);  // ← runs on a potentially dirty working tree
+```
+
+**Fix applied — `orchestrator/orchestrator.js`:**
+
+`git reset --hard HEAD` on the worktree is now run immediately before each fix stage invocation:
+
+```js
+// Reset any uncommitted changes left by a prior fix attempt so each attempt
+// starts from a clean committed state and changes don't silently accumulate.
+const execWs = context.execWorkspace || workspace;
+spawnSync("git", ["-C", execWs, "reset", "--hard", "HEAD"], { stdio: "inherit" });
+```
+
+This is safe: the worktree is isolated from the main workspace, the last committed state is always correct (a prior passing state or the initial branch state), and any uncommitted changes from a failed fix attempt are by definition wrong — if they were correct, the review would have passed.
+
+---
+
+## Finish Stage Issues
+
+> Source: session_2.md — Gemini CLI running the finish stage after a Review PASS
+
+### CRITICAL
+
+---
+
+#### FINISH-1 — Gemini cannot read `FINISHING_BRANCH.md` — symlink traversal blocked
+
+**Severity:** Critical — Gemini proceeds with no cleanup or delivery guidance, enabling arbitrary destructive behavior in yolo mode.
+
+**What was observed:**
+
+```
+Error executing tool read_file: Path not in workspace: Attempted path
+"/Users/kris/code/personal/mat_latest_voiceai_projs/.spiq-worktree/.spiq/skills/FINISHING_BRANCH.md"
+resolves outside the allowed workspace directories:
+/Users/kris/code/personal/mat_latest_voiceai_projs/.spiq-worktree
+or the project temp directory: /Users/kris/.gemini/tmp/spiq-worktree
+```
+
+This error fired twice (Gemini retried once). Gemini then proceeded through the finish stage with no access to `FINISHING_BRANCH.md`.
+
+**Root cause:**
+
+`setupWorktree()` in `orchestrator/orchestrator.js` created `.spiq-worktree/.spiq` as a **symlink** pointing to the real `.spiq/` directory in the main workspace:
+
+```js
+fs.symlinkSync(cfg.stateDir, worktreeSpiq);
+```
+
+Gemini CLI resolves symlinks when validating file paths for its sandbox. The resolved canonical path of `.spiq-worktree/.spiq/skills/FINISHING_BRANCH.md` is `<main-workspace>/.spiq/skills/FINISHING_BRANCH.md` — which is **outside** the allowed workspace boundary (`.spiq-worktree/`). Gemini blocks the read.
+
+OpenCode (used for build/test/fix stages) navigates relative paths (`../.spiq/skills/`) and is not subject to the same symlink resolver, so it was unaffected.
+
+**Fix applied — `orchestrator/orchestrator.js`:**
+
+The symlink is replaced with a physical copy. `fs.cpSync` copies the `skills/` directory tree into the worktree, and `fs.copyFileSync` copies individual state files (`SPEC.md`, `tasks/plan.md`, `handoff.md`) that agents need:
+
+```js
+const worktreeSpiq = path.join(worktreePath, ".spiq");
+fs.mkdirSync(worktreeSpiq, { recursive: true });
+
+const skillsSrc = path.join(cfg.stateDir, "skills");
+if (fs.existsSync(skillsSrc)) {
+  fs.cpSync(skillsSrc, path.join(worktreeSpiq, "skills"), { recursive: true });
+}
+
+for (const rel of ["SPEC.md", "tasks/plan.md", "handoff.md"]) {
+  const src = path.join(cfg.stateDir, rel);
+  if (fs.existsSync(src)) {
+    const dst = path.join(worktreeSpiq, rel);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.copyFileSync(src, dst);
+  }
+}
+```
+
+All paths Gemini's `read_file` tool resolves are now real files inside `.spiq-worktree/` — no symlink traversal required.
+
+**Note:** The copied skills snapshot is taken once at worktree setup time. The orchestrator does not re-sync skill files during the pipeline run, which is acceptable: skill files do not change between pipeline stages.
+
+---
+
+#### FINISH-2 — Gemini deleted the `src/` directory — direct consequence of FINISH-1
+
+**Severity:** Critical — entire source tree destroyed by the delivery agent during cleanup.
+
+**What was observed:**
+
+After the FINISH-1 error blocked skill file access, Gemini proceeded with the finish stage in yolo mode. Without `FINISHING_BRANCH.md` guidance, Gemini interpreted "5. Clean up the workspace" (from `finish.md`) without any constraints and deleted the project's `src/` directory.
+
+**Root cause (three layers):**
+
+1. **FINISH-1** — `FINISHING_BRANCH.md` was inaccessible. The skill explicitly defines safe cleanup: only `.spiq/` build artifacts should be removed; source directories must not be touched.
+
+2. **Permissive yolo policy** — `policies/yolo-allow-shell.toml` uses `commandRegex = ".*"` to bypass all of Gemini CLI's dangerous-command heuristics, including the `rm -rf` guard. This policy is needed for legitimate shell operations, but it means any destructive command runs unchecked.
+
+3. **No in-prompt safety rule** — `prompts/finish.md` had no explicit prohibition on deleting source directories. The only constraints lived in `FINISHING_BRANCH.md`, which Gemini could not read.
+
+**Fix applied — `prompts/finish.md`:**
+
+A WORKSPACE SAFETY RULE blockquote added immediately after the HARD STOP CHECK, so it is visible even if skill files are inaccessible:
+
+```markdown
+> **WORKSPACE SAFETY RULE**: Never delete `src/`, `tests/`, or any source code directory.
+> The only files you may remove are `.spiq/` build artifacts — and only after the delivery
+> action (PR / merge / push) has completed successfully. The worktree directory is cleaned
+> up by the orchestrator after you exit; do NOT run `git worktree remove` yourself.
+```
+
+**Fix applied — `prompts/skills/FINISHING_BRANCH.md`:**
+
+A SAFETY block added at the start of Step 5 (Clean Up the Workspace):
+
+```markdown
+**SAFETY**: Only remove `.spiq/` build artifacts. Never delete `src/`, `tests/`,
+`node_modules/`, or any project source directory. The worktree directory is removed
+by the orchestrator after you exit — do NOT run `git worktree remove` yourself.
+```
+
+The `git worktree remove [worktree-path] --force` instruction was also removed from Step 5 — the orchestrator owns worktree lifecycle, not Gemini.
+
+---
+
+### HIGH
+
+---
+
+#### FINISH-3 — Skills referenced as `.spiq/skills/<file>` paths Gemini cannot access; no inline fallback
+
+**Severity:** High — when the symlink issue occurs, Gemini has zero skill guidance; no error is shown to the operator until something goes wrong.
+
+**What was observed:**
+
+`promptCompiler.js:compileSkills()` emits a catalog block like:
+
+```
+- **finishing-a-development-branch** (`.spiq/skills/FINISHING_BRANCH.md`) — Complete the development lifecycle...
+```
+
+Gemini is told to read the file with `read_file`. When the read fails (FINISH-1), there is no fallback — the skill content is simply absent. The catalog still appears in the prompt, telling Gemini a skill exists that it cannot access, which is confusing and leads to retry attempts.
+
+**Root cause:**
+
+Skills are provided as catalog references (name + path) rather than inline content, to save context tokens. This is intentional for build/test/fix stages where OpenCode can follow symlinks. For Gemini in the finish stage, the path-reference pattern fails silently when the symlink is broken.
+
+**Fix:** FINISH-1 fix (physical copy) resolves this. With real files at real paths, `read_file` succeeds and no inline fallback is needed. The catalog-reference pattern remains appropriate.
+
+---
+
+### MEDIUM
+
+---
+
+#### FINISH-4 — `FINISHING_BRANCH.md` did not prohibit `src/` deletion or worktree self-removal
+
+**Severity:** Medium — even when the skill is readable, cleanup Step 5 lacked explicit safety constraints.
+
+**What was observed:**
+
+Step 5 of `FINISHING_BRANCH.md` described:
+
+```bash
+# If using git worktrees, remove the feature worktree
+git worktree remove [worktree-path] --force
+```
+
+There was no prohibition on deleting project source directories and no note that the worktree is managed by the orchestrator. An agent following the skill literally would attempt `git worktree remove` from within the worktree — which causes git errors — and had no guidance distinguishing "source code directories" from "build artifacts."
+
+**Fix applied — `prompts/skills/FINISHING_BRANCH.md`:**
+
+Safety block and removal of the `git worktree remove` command from Step 5 (see FINISH-2 fix above).
+
+---
+
 ## Fixes Summary
 
 | File | Changes Made |
 |------|-------------|
 | `prompts/build.md` | Complete rewrite: inline EXECUTION SCOPE template (C1); explicit RED-gate transition (C2); per-task TDD loop with "return to step 1" (C3); pre-handoff `git status --short` gate (C4); session length guard — 80 req → `/compact` (C5); EXECUTION CHECK after each commit (H1); Co-Authored-By in all commit examples (H2); module-resolution RED gate clarification (H3); `git diff --staged` before each commit (H4); per-module implementation loop (M1); node_modules `.d.ts` check before web search (M3/L4); ESM/CJS detection step (M4); `testTimeout: 10000` requirement (M5); HTTP client mock rule (M5) |
 | `agent-cli/runners/opencode.js` | `compaction.reserved` raised from 5,000 → 25,000 — triggers compaction at 81% capacity instead of 96% (C5) |
-| `orchestrator/orchestrator.js` | Added `writeHandoffArtifact()` — extracts BUILD HANDOFF SUMMARY from build output and writes to `.spiq/handoff.md` after every build; extended handoff injection to cover test stage in addition to build retry (test Issues 2 and 6) |
+| `orchestrator/orchestrator.js` | (Round 1) Added `writeHandoffArtifact()` — extracts BUILD HANDOFF SUMMARY from build output and writes to `.spiq/handoff.md` after every build; extended handoff injection to cover test stage in addition to build retry (test Issues 2 and 6) |
+| `orchestrator/orchestrator.js` | (Round 2) Replaced `.spiq/` symlink with `fs.cpSync` + `fs.copyFileSync` — copies skills directory and state files as real files into the worktree so Gemini's path resolver can access them without symlink traversal (FINISH-1, FINISH-3) |
+| `orchestrator/orchestrator.js` | (Round 2) Added `git reset --hard HEAD` on the worktree immediately before each fix stage invocation — ensures each fix attempt starts from a clean committed state (O1) |
 | `orchestrator/promptCompiler.js` | Removed `WIP_CHECKPOINT.md` from test stage base skills (test Issue 4) |
-| `prompts/test.md` | Context budget rules moved before `{{SKILLS}}`; "Start here: read `.spiq/handoff.md` first" added as first instruction; `{{HANDOFF}}` section added (test Issues 1, 2, 3) |
+| `prompts/fix.md` | Replaced "commit each logical fix" with a mandatory end-of-fix block: `git add -A` → `git status --short` → `git commit` → `git log --oneline -3`; explicit prohibition on selective `git add <path>` (F1, F2) |
+| `prompts/test.md` | (Round 1) Context budget rules moved before `{{SKILLS}}`; "Start here: read `.spiq/handoff.md` first" added; `{{HANDOFF}}` section added (test Issues 1, 2, 3) |
+| `prompts/test.md` | (Round 2) Uncommitted-Changes Gate section added — requires `git status --short | grep -v '^?? \.spiq'` before handoff summary; blocks stage if any source files are uncommitted (T1) |
+| `prompts/finish.md` | WORKSPACE SAFETY RULE blockquote added immediately after HARD STOP CHECK — prohibits deleting `src/`, `tests/`, or any source directory; prohibits `git worktree remove`; in-prompt so it is visible even when skill files are inaccessible (FINISH-2, FINISH-4) |
+| `prompts/skills/FINISHING_BRANCH.md` | SAFETY block added at the start of Step 5; `git worktree remove [worktree-path] --force` removed — worktree lifecycle is managed by the orchestrator, not Gemini (FINISH-2, FINISH-4) |
 | `prompts/skills/BUILD_HANDOFF_SUMMARY.md` | Skill overview updated to require direct `write_file` to `.spiq/handoff.md`; verification checklist entry added (test Issue 6) |
 | `docs/test-stage-missing-context-guide.md` | New guide — detailed analysis of all 7 test stage issues with inference logs, code examples, fix details, and future improvements |
 
@@ -612,10 +891,27 @@ Run a new build → test pipeline and confirm the following. Each item maps to o
 - [ ] No empty globs (`**/*.test.*`, `**/.spiq/**`) at stage start (test Issue 1)
 - [ ] `n_tokens` at first inference call is below 30K (test Issues 5, 7)
 
+**Test stage — uncommitted-changes gate (T1):**
+- [ ] Before handoff summary is written, `git status --short | grep -v '^?? \.spiq'` produces no output
+- [ ] If uncommitted files are present, stage prints "TEST BLOCKED: uncommitted source changes detected" and does not write the handoff
+
 **vitest.config.ts (for new projects):**
 - [ ] `testTimeout: 10000` present (M5)
 - [ ] All client modules mocked with `vi.mock()` (M5)
 - [ ] `npm test` completes within 30 seconds
+
+**Fix stage — when a review FAIL triggers the retry loop:**
+- [ ] Orchestrator log shows `git reset --hard HEAD` output before the fix stage starts (O1)
+- [ ] Fix stage log ends with `git add -A` → `git status --short` → `git commit` (F1, F2)
+- [ ] `git log --oneline -3` appears in the fix stage log, confirming the commit was created (F1)
+- [ ] After the fix stage exits, `git status --short | grep -v '.spiq'` on the worktree is empty (F2)
+
+**Finish stage:**
+- [ ] No "resolves outside the allowed workspace" errors in the finish stage log (FINISH-1)
+- [ ] Gemini reads `.spiq/skills/FINISHING_BRANCH.md` successfully — no retry errors (FINISH-1)
+- [ ] `src/` directory exists and is intact after finish stage completes (FINISH-2)
+- [ ] Finish stage log contains the DELIVERY SUMMARY block from `FINISHING_BRANCH.md` Step 2 (FINISH-1)
+- [ ] Worktree cleanup (`git worktree remove`) does not appear in the finish stage log — orchestrator handles it (FINISH-4)
 
 ---
 
@@ -670,6 +966,38 @@ The test stage future improvements are documented in detail in [`test-stage-miss
 
 ---
 
+### Fix stage
+
+#### FIX-F1 — Re-sync `.spiq/` state files into worktree after each fix attempt (medium value)
+
+The current worktree copy is made once at setup time. If the orchestrator updates `handoff.md`, `SPEC.md`, or `tasks/plan.md` between fix attempts (e.g. via `writeHandoffArtifact`), the worktree copy becomes stale. Adding a targeted sync step at the start of each fix attempt — just for the state files, not the skills — would keep agents working from fresh context.
+
+#### FIX-F2 — FIX SUMMARY validation in orchestrator (low priority)
+
+`fix.md` Step 3 requires the agent to output a `FIX SUMMARY` block (Critical resolved, Important resolved, etc.). Neither session log showed this block being produced, and the orchestrator ignores it. Adding a check that parses and logs the FIX SUMMARY after the fix stage would make it easier to audit whether all review findings were addressed before the test stage re-runs.
+
+#### FIX-F3 — Inject the prior-attempt commit hash into the next fix prompt (medium value)
+
+Currently each fix attempt starts from a `git reset --hard HEAD` baseline with no reference to what the previous attempt tried. Injecting a short `git log -1 --stat` of the last fix commit into the fix prompt would give the agent concrete context: "the previous attempt fixed X — your job is to fix the remaining Y."
+
+---
+
+### Finish stage
+
+#### FINISH-F1 — Re-sync `.spiq/` into worktree immediately before finish stage (high value)
+
+The worktree copy of skills and state files is made at build-stage setup. By the time the finish stage runs (after build → test → multiple fix/review cycles), `handoff.md` and the state directory will have been updated by the orchestrator but the worktree copy will be stale. A targeted resync — copying `handoff.md` and any other changed state files into the worktree `.spiq/` — immediately before the finish stage would ensure Gemini works from the most current handoff and spec.
+
+#### FINISH-F2 — Validate `src/` integrity before and after finish stage (high value)
+
+The orchestrator could snapshot the set of directories at the worktree root (e.g. `ls -d */`) before invoking the finish stage and diff it against the same snapshot afterwards. If any source directory disappears, the orchestrator could log a critical error, restore from the last git commit, and halt rather than silently continuing. This would catch FINISH-2 class incidents automatically.
+
+#### FINISH-F3 — Narrow yolo-allow-shell.toml to a safer allowlist (medium value)
+
+The current policy uses `commandRegex = ".*"` to bypass all of Gemini CLI's dangerous-command heuristics. A more targeted regex — e.g. allowing `git`, `gh`, `npm`, `npx`, `tsc`, `node` but blocking raw `rm`, `find -exec`, etc. — would provide yolo-mode convenience for legitimate operations while preserving guards against accidental deletion. The `rm -rf .spiq/` case (legitimate cleanup) could be explicitly allowlisted by pattern rather than opening all shell commands.
+
+---
+
 ## Related Docs
 
 - [`test-stage-missing-context-guide.md`](test-stage-missing-context-guide.md) — deep-dive on all 7 test stage issues
@@ -678,3 +1006,8 @@ The test stage future improvements are documented in detail in [`test-stage-miss
 - [`executor-token-cost-reduction-plan.md`](executor-token-cost-reduction-plan.md) — token cost reduction strategies for the executor role
 - [`build-failure-recovery-guide.md`](build-failure-recovery-guide.md) — pipeline state recovery after build failures
 - [`model-selection-guide.md`](model-selection-guide.md) — choosing models for each pipeline role including SWA considerations
+- [`review-fix-loop-guide.md`](review-fix-loop-guide.md) — how the review → fix → test retry cycle is orchestrated
+
+**Session logs that informed the fix/finish stage sections:**
+- `/Users/kris/code/personal/mat_latest_voiceai_projs/ai_debug/session_1.md` — first Review FAIL retry (fix attempt 1)
+- `/Users/kris/code/personal/mat_latest_voiceai_projs/ai_debug/session_2.md` — second Review FAIL retry and finish stage (fix attempt 2 → PASS → finish)
