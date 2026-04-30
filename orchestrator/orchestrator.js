@@ -220,7 +220,7 @@ function setupWorktree(workspace, cfg) {
       fs.cpSync(skillsSrc, path.join(worktreeSpiq, "skills"), { recursive: true });
     }
     // Copy state files agents need to read.
-    for (const rel of ["SPEC.md", "tasks/plan.md", "handoff.md"]) {
+    for (const rel of ["SPEC.md", "tasks/plan.md", "tasks/todo.md", "handoff.md"]) {
       const src = path.join(cfg.stateDir, rel);
       if (fs.existsSync(src)) {
         const dst = path.join(worktreeSpiq, rel);
@@ -468,7 +468,7 @@ async function runPipeline(workspace) {
   }
 
   // Pre-load context from persisted artifacts for stages that already completed
-  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, planDir: cfg.planDir };
+  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, todoFile: cfg.todoFile, planDir: cfg.planDir };
 
   // Load selected_skills persisted by the plan stage (survives pipeline restarts)
   try {

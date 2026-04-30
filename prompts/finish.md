@@ -21,6 +21,8 @@ description: Complete the development lifecycle — final verification, delivery
 The review stage returned a PASS verdict. The pipeline is ready for delivery.
 
 Spec: {{SPEC_FILE}}
+Plan: {{PLAN_FILE}}
+Todo: {{TODO_FILE}}
 Review output: {{REVIEW}}
 Feature branch: {{FEATURE_BRANCH}}
 
