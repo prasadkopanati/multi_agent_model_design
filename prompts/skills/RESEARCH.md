@@ -254,6 +254,50 @@ mcpc --json mcp.apify.com \
 
 ---
 
+## 4. GitHub Repository Search (Quality Filter)
+
+When a reference implementation on GitHub would help the executor, search for repos using
+Tavily (query: `site:github.com <topic>`). Then verify each found repo against the GitHub
+REST API.
+
+**Hard quality threshold: ≥ 100 stars AND ≥ 10 forks. Discard any repo below this.**
+
+```bash
+python3 << 'EOF'
+import os, json, urllib.request
+
+def check_repo(owner_repo):
+    url = f"https://api.github.com/repos/{owner_repo}"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "spiq-research"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            stars = data.get("stargazers_count", 0)
+            forks = data.get("forks_count", 0)
+            passed = stars >= 100 and forks >= 10
+            print(f"{'PASS' if passed else 'SKIP'}  {owner_repo}: {stars} stars, {forks} forks")
+            return passed, data
+    except Exception as e:
+        print(f"  Error checking {owner_repo}: {e}")
+        return False, {}
+
+repos = ["owner/repo"]  # populate from Tavily search results
+for repo in repos:
+    passed, data = check_repo(repo)
+    if passed:
+        print(f"  Include: {data.get('html_url')} -- {data.get('description','')}")
+EOF
+```
+
+`GITHUB_TOKEN` is optional — the API works unauthenticated at 60 req/hour, which is
+sufficient for research. Set it in `.env` to raise the limit to 5000 req/hour if needed.
+
+---
+
 ## Research Discipline
 
 Run at most **5 targeted queries** total. More is waste — the executor gets overwhelmed by noise.
@@ -274,14 +318,18 @@ Do NOT paste entire documentation pages into the plan. Summarize and extract.
 
 ---
 
-## RESEARCH CONTEXT Output Format
+## Research Output Format
 
-Add a `## RESEARCH CONTEXT` section **at the very top of plan.md**, before the PLAN QUALITY GATE RESULT block. This is the first thing the executor reads.
+Write findings to **`.spiq/research.md`** using `write_file`. This is the primary artifact
+read by both the plan agent and the executor agent.
+
+For any topic requiring more than ~500 words to cover adequately, write a dedicated file
+to `.spiq/research/<topic-slug>.md` and include a one-line summary plus link in `research.md`.
 
 ```markdown
-## RESEARCH CONTEXT
+# Research Context
 
-_Gathered by the plan agent. Read this section before writing any code._
+_Gathered by the research agent. Read this before writing any code._
 _Services used: Tavily · Firecrawl · Apify_ (or list which ones were available)
 
 ---

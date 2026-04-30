@@ -13,6 +13,8 @@ function makeWorkspaceConfig(workspace) {
     reqFile:        path.join(stateDir, "req.md"),
     brainstormFile: path.join(stateDir, "brainstorm.md"),
     handoffFile:    path.join(stateDir, "handoff.md"),
+    researchFile:   path.join(stateDir, "research.md"),
+    researchDir:    path.join(stateDir, "research"),
     specFile:       path.join(stateDir, "SPEC.md"),
     planFile:       path.join(stateDir, "tasks", "plan.md"),
     todoFile:       path.join(stateDir, "tasks", "todo.md"),
