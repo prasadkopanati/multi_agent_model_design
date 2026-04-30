@@ -10,6 +10,7 @@ description: Implement the next task incrementally — write failing tests first
 - Append `2>&1 | tail -50` to all test/build/lint commands. If the output is insufficient to diagnose a failure, re-run with `tail -100` or higher.
 - Read skill files only when the task explicitly requires that skill. Each file at most once.
 - Read source files using `offset` + `limit` parameters — never the entire file unless you are about to write to it.
+- **Technical context:** If `.spiq/research.md` exists, read it immediately after the handoff. It contains API documentation, SDK signatures, auth patterns, and code samples gathered for this feature. Use it as your primary reference — do not run web searches for information already documented there.
 
 **Session length guard:** If you have submitted more than 80 model requests in this session, run `/compact` before continuing. A build that accumulates 100+ requests leaves the test stage with near-zero context and reasoning budget.
 

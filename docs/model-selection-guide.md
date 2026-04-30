@@ -1,6 +1,6 @@
 # Model Selection Guide
 
-> Last updated: 2026-04-26
+> Last updated: 2026-04-30
 
 This guide documents the recommended model choices for each agent stage in the multi-agent pipeline, along with rationale and configuration instructions.
 
@@ -11,6 +11,7 @@ This guide documents the recommended model choices for each agent stage in the m
 | Stage | Agent | Env Var | Current Default |
 |-------|-------|---------|-----------------|
 | Spec | Claude (Controller) | `CLAUDE_MODEL` | `sonnet` |
+| Research | Claude (Controller) | `CLAUDE_MODEL` | `sonnet` |
 | Plan | Claude (Controller) | `CLAUDE_MODEL` | `sonnet` |
 | Build | OpenCode (Executor) | `OPENCODE_MODEL` | `opencode/qwen3.5-plus` |
 | Test | OpenCode (Executor) | `OPENCODE_MODEL` | `opencode/qwen3.5-plus` |
@@ -20,9 +21,9 @@ This guide documents the recommended model choices for each agent stage in the m
 
 ---
 
-## Anthropic (Claude) — Spec, Plan, Review
+## Anthropic (Claude) — Spec, Research, Plan, Review
 
-These three stages are reasoning-heavy: spec writing requires deep requirements analysis, planning requires dependency ordering and task decomposition, and review requires five-axis judgment (correctness, readability, architecture, security, performance). Invest in the strongest model here — errors in spec and plan propagate through the entire pipeline.
+These four stages are reasoning-heavy: spec writing requires deep requirements analysis, research requires evaluating sources and synthesizing technical findings, planning requires dependency ordering and task decomposition, and review requires five-axis judgment (correctness, readability, architecture, security, performance). Invest in the strongest model here — errors in spec and plan propagate through the entire pipeline.
 
 ### Recommended Models
 
@@ -38,6 +39,7 @@ These three stages are reasoning-heavy: spec writing requires deep requirements 
 | Stage | Recommended Model | Rationale |
 |-------|-------------------|-----------|
 | `AGENT_SPEC` | `claude-opus-4-7` | Spec errors cascade — invest here |
+| `AGENT_RESEARCH` | `claude-sonnet-4-6` | Source evaluation and synthesis; Sonnet handles it well. Use Opus if the feature touches many unfamiliar APIs |
 | `AGENT_PLAN` | `claude-sonnet-4-6` | Task decomposition is structured; Sonnet handles it well at lower cost |
 | `AGENT_REVIEW` | `claude-opus-4-7` | Security and architecture review benefit from Opus's deeper judgment |
 | `AGENT_FAILURE` | `claude-sonnet-4-6` | Quick root-cause summaries don't need Opus-level reasoning |
@@ -162,6 +164,7 @@ Balanced quality and cost across all stages:
 
 # Agent routing
 AGENT_SPEC=claude
+AGENT_RESEARCH=claude
 AGENT_PLAN=claude
 AGENT_BUILD=opencode
 AGENT_TEST=opencode
@@ -195,6 +198,10 @@ Choosing a model for a stage?
     │
     ├── High reasoning required? (spec, review)
     │     └── Use claude-opus-4-7
+    │
+    ├── Source synthesis, API discovery? (research)
+    │     └── Use claude-sonnet-4-6
+    │         └── Many unfamiliar APIs: claude-opus-4-7
     │
     ├── Structured reasoning, cost-sensitive? (plan, failure)
     │     └── Use claude-sonnet-4-6

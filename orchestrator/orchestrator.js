@@ -13,8 +13,9 @@ const { appendEvent } = require("../utils/event-log");
 
 const DEFAULT_AGENTS = {
   brainstorm: "claude",
-  spec:    "claude",
-  plan:    "claude",
+  spec:     "claude",
+  research: "claude",
+  plan:     "claude",
   review:  "claude",
   finish:  "gemini",
   failure: "claude",
@@ -220,13 +221,18 @@ function setupWorktree(workspace, cfg) {
       fs.cpSync(skillsSrc, path.join(worktreeSpiq, "skills"), { recursive: true });
     }
     // Copy state files agents need to read.
-    for (const rel of ["SPEC.md", "tasks/plan.md", "tasks/todo.md", "handoff.md"]) {
+    for (const rel of ["SPEC.md", "tasks/plan.md", "tasks/todo.md", "handoff.md", "research.md"]) {
       const src = path.join(cfg.stateDir, rel);
       if (fs.existsSync(src)) {
         const dst = path.join(worktreeSpiq, rel);
         fs.mkdirSync(path.dirname(dst), { recursive: true });
         fs.copyFileSync(src, dst);
       }
+    }
+    // Copy per-topic research deep-dive files if present.
+    const researchDirSrc = path.join(cfg.stateDir, "research");
+    if (fs.existsSync(researchDirSrc)) {
+      fs.cpSync(researchDirSrc, path.join(worktreeSpiq, "research"), { recursive: true });
     }
   } catch (err) {
     console.warn(`⚠  Could not copy .spiq into worktree: ${err.message}`);
@@ -420,6 +426,7 @@ async function runBrainstormStage(workspace, context, cfg) {
 const PIPELINE = [
   { stage: "brainstorm", contextKey: "brainstorm", requiresApproval: false, isBrainstorm: true },
   { stage: "spec",       contextKey: "spec",        requiresApproval: true  },
+  { stage: "research",   contextKey: "research",    requiresApproval: false },
   { stage: "plan",       contextKey: "plan",        requiresApproval: true  },
   { stage: "build",      contextKey: "build",       requiresApproval: false, usesWorktree: true },
   { stage: "test",       contextKey: "test",        requiresApproval: false, usesWorktree: true },
@@ -437,6 +444,25 @@ function promptApproval(stage, cfg) {
     rl.question(`Approve and continue to next stage? [y/N] `, (answer) => {
       rl.close();
       resolve(answer.trim().toLowerCase() === "y");
+    });
+  });
+}
+
+function promptResearchApproval(cfg) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    console.log(`\n📚 RESEARCH complete. Review: ${cfg.researchFile}`);
+    rl.question(`Approve research and continue to plan? [y/N/feedback text] `, (answer) => {
+      rl.close();
+      const trimmed = answer.trim();
+      if (trimmed.toLowerCase() === "y") {
+        resolve({ approved: true, feedback: "" });
+      } else if (trimmed === "" || trimmed.toLowerCase() === "n") {
+        resolve({ approved: false, feedback: "" });
+      } else {
+        // Any other text is treated as feedback → re-run research with it injected
+        resolve({ approved: false, feedback: trimmed });
+      }
     });
   });
 }
@@ -468,7 +494,7 @@ async function runPipeline(workspace) {
   }
 
   // Pre-load context from persisted artifacts for stages that already completed
-  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, todoFile: cfg.todoFile, planDir: cfg.planDir };
+  let context = { request, specFile: cfg.specFile, planFile: cfg.planFile, todoFile: cfg.todoFile, planDir: cfg.planDir, researchFile: cfg.researchFile, researchDir: cfg.researchDir };
 
   // Load selected_skills persisted by the plan stage (survives pipeline restarts)
   try {
@@ -557,6 +583,34 @@ async function runPipeline(workspace) {
     }
 
     appendEvent(cfg, "stage_complete", stage);
+
+    if (stage === "research") {
+      if (fs.existsSync(cfg.researchFile)) {
+        console.log(`📚 Research saved → ${cfg.researchFile}`);
+      } else {
+        console.warn("⚠  Research stage completed but .spiq/research.md was not written — plan agent will run its own research.");
+      }
+
+      // Approval loop: repeats research with optional textual feedback until user approves.
+      // Typing "y" continues; "n"/empty re-runs; any other text is injected as feedback.
+      let researchFeedback = "";
+      while (true) {
+        const { approved, feedback } = await promptResearchApproval(cfg);
+        appendEvent(cfg, "approval", "research", { approved, feedback });
+        if (approved) break;
+        researchFeedback = feedback;
+        if (researchFeedback) {
+          console.log(`\n🔄 Re-running research with feedback: "${researchFeedback}"`);
+        } else {
+          console.log(`\n🔄 Re-running research...`);
+        }
+        context = { ...context, researchFeedback };
+        runStage("research", workspace, context, cfg);
+        const newOutput = readOutputArtifact("research", cfg);
+        if (newOutput) context = { ...context, research: newOutput };
+      }
+      context = { ...context, researchFeedback: "" };
+    }
 
     if (stage === "review") {
       const pass = isReviewPass(output);
