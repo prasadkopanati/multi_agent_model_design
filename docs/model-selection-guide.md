@@ -88,6 +88,40 @@ OPENCODE_MODEL=opencode/gpt-5.3-codex
 
 ---
 
+## OpenClaude — Alt Controller (any stage)
+
+OpenClaude is a drop-in alternative to Claude Code. It speaks the OpenAI-compatible API, so it can route to Gemini, Ollama, local llama.cpp servers, or any OpenAI-compatible endpoint. Assign it to any stage by setting the corresponding `AGENT_*` variable to `openclaude`.
+
+### When to Use OpenClaude
+
+| Scenario | Notes |
+|----------|-------|
+| Local model (llama.cpp, Ollama) | Set `OPENCLAUDE_MODEL` to the local model name; point base URL to localhost |
+| Alternative cloud provider | Useful for avoiding rate limits on the Claude API or mixing providers |
+| Cost reduction on lighter stages | Run plan/failure analysis on a smaller local model |
+
+### Recommended Models
+
+| Rank | Model ID | Notes |
+|------|----------|-------|
+| 1 | `sonnet` | Default; maps to Claude Sonnet 4.6 via OpenAI-compatible endpoint |
+| 2 | `opus` | Max reasoning via OpenAI-compatible endpoint |
+| 3 | _(any Ollama tag)_ | e.g. `qwen3:30b-a3b`, `llama3.3:70b` — see openclaude-context-size-guide.md |
+
+### Configuration
+
+```bash
+# .env
+OPENCLAUDE_MODEL=sonnet       # or a local model tag
+
+# Assign openclaude to a stage (validated: claude | opencode | gemini | openclaude)
+AGENT_BUILD=openclaude
+```
+
+> See [openclaude-context-size-guide.md](openclaude-context-size-guide.md) for token optimisation when running against local models.
+
+---
+
 ## Gemini — Finish
 
 The Finish stage handles PR creation, branch management, and delivery cleanup. It is largely templated work — PR body generation, branch operations, merge decisions — where reliability and speed matter more than maximum reasoning capability.

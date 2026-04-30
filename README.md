@@ -7,6 +7,7 @@ A deterministic, multi-stage coding workflow powered by three CLI agents:
 | **Controller** | Claude Code | `sonnet` (Claude Sonnet 4.6) | Spec, plan, review, failure analysis |
 | **Executor** | OpenCode | `opencode/qwen3.5-plus` | Build, test, fix loops |
 | **Finisher** | Gemini CLI | `gemini-2.5-flash-preview` | Final delivery (finish stage) |
+| **Alt Controller** | OpenClaude | `sonnet` | Drop-in alternative controller; supports OpenAI-compatible, Gemini, Ollama providers |
 
 The system is orchestrated via Node.js and improves over time via a structured failure-analysis loop.
 
@@ -105,12 +106,13 @@ echo ".spiq/" >> .gitignore
 Copy and edit the `.env` file in the agenticspiq installation directory:
 
 ```bash
-# Agent selection per stage (claude | opencode | gemini)
+# Agent selection per stage (claude | opencode | gemini | openclaude)
 AGENT_SPEC=claude
 AGENT_PLAN=claude
 AGENT_BUILD=opencode
 AGENT_TEST=opencode
 AGENT_REVIEW=claude
+AGENT_FIX=opencode
 AGENT_FINISH=gemini
 AGENT_FAILURE=claude
 
@@ -118,6 +120,7 @@ AGENT_FAILURE=claude
 CLAUDE_MODEL=sonnet                    # Claude Code --model flag (e.g. sonnet, opus, haiku)
 OPENCODE_MODEL=opencode/qwen3.5-plus   # OpenCode -m flag
 GEMINI_MODEL=gemini-2.5-flash-preview  # Gemini CLI --model flag
+OPENCLAUDE_MODEL=sonnet                # OpenClaude model (supports OpenAI-compatible, Gemini, Ollama)
 
 # Finish stage delivery action (pr | merge | keep | discard)
 FINISH_ACTION=pr
@@ -210,6 +213,7 @@ bin/agenticspiq.js
 | `agent-cli/runners/claude.js` | Claude Code runner |
 | `agent-cli/runners/opencode.js` | OpenCode runner |
 | `agent-cli/runners/gemini.js` | Gemini runner |
+| `agent-cli/runners/openclaude.js` | OpenClaude runner (OpenAI-compatible, Gemini, Ollama) |
 | `utils/scaffold.js` | First-run workspace initialisation |
 | `prompts/*.md` | Stage prompt templates |
 | `prompts/skills/` | Reusable skill modules |
@@ -242,8 +246,9 @@ Triggered automatically when:
 | Role | Default | Override via |
 |---|---|---|
 | Controller (spec/plan/review/failure) | Claude Sonnet 4.6 (`sonnet`) | `CLAUDE_MODEL` |
-| Executor (build/test) | Qwen3.5-plus (`opencode/qwen3.5-plus`) | `OPENCODE_MODEL` |
+| Executor (build/test/fix) | Qwen3.5-plus (`opencode/qwen3.5-plus`) | `OPENCODE_MODEL` |
 | Finisher (finish) | Gemini 2.5 Flash Preview | `GEMINI_MODEL` |
+| Alt Controller (any stage) | `sonnet` | `OPENCLAUDE_MODEL` |
 
 To switch the controller to Opus for a harder task:
 ```bash
