@@ -2,12 +2,17 @@
 description: Run TDD workflow — write failing tests, implement, verify. For bugs, use the Prove-It pattern.
 ---
 
-{{SKILLS}}
-
 **Context budget — follow these rules on every command or costs spiral:**
+- **Start here:** Read `.spiq/handoff.md` first — it contains the file manifest and test targets from the build stage. Do NOT explore the workspace structure or run broad globs before reading it.
 - Append `2>&1 | tail -50` to all test/build commands. If the output is insufficient to diagnose a failure, re-run with `tail -100` or higher.
 - Read skill files only when the task explicitly requires that skill. Each file at most once.
 - Read source files using `offset` + `limit` parameters — never the entire file unless you are about to write to it.
+
+{{SKILLS}}
+
+## Build Handoff
+
+{{HANDOFF}}
 
 For new features:
 1. Write tests that describe the expected behavior (they should FAIL)

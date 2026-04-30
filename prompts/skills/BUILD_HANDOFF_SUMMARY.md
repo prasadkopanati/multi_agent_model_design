@@ -9,7 +9,7 @@ description: Produce a structured handoff block at the end of every build or tes
 
 A build that completes without a handoff summary forces the next agent to reconstruct context from scratch — re-reading diffs, re-tracing requirements, and making assumptions that may be wrong. The handoff summary prevents this by packaging the output of each stage into a consumable block.
 
-**The rule:** The last action of every build and test stage is producing a handoff summary. No exceptions.
+**The rule:** The last action of every build and test stage is writing the handoff summary to `.spiq/handoff.md` using `write_file`. No exceptions. The orchestrator reads this file at the start of the next stage — if it is missing, the next agent explores the workspace from scratch.
 
 ---
 
@@ -127,6 +127,7 @@ Do not silently stop mid-implementation. A declared PARTIAL is better than an un
 
 ## Verification
 
+- [ ] Handoff summary has been written to `.spiq/handoff.md` using `write_file`
 - [ ] Handoff summary is the last output of the build stage
 - [ ] Every assigned requirement appears under addressed or NOT addressed
 - [ ] Changes made includes a why, not just a what
