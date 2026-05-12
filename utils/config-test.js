@@ -10,7 +10,7 @@ const { runOpenCode } = require("../agent-cli/runners/opencode");
 const { runGemini }   = require("../agent-cli/runners/gemini");
 const { runOpenClaude } = require("../agent-cli/runners/openclaude");
 
-const STAGE_AGENTS = ["AGENT_SPEC", "AGENT_PLAN", "AGENT_BUILD", "AGENT_TEST", "AGENT_REVIEW", "AGENT_FINISH", "AGENT_FAILURE"];
+const STAGE_AGENTS = ["AGENT_SPEC", "AGENT_PLAN", "AGENT_BUILD", "AGENT_TEST", "AGENT_REVIEW", "AGENT_FINISH", "AGENT_FAILURE", "AGENT_FIX"];
 
 const MODEL_DEFAULTS = {
   claude:   "sonnet",
@@ -97,6 +97,18 @@ async function checkConfig() {
     const mark  = r.ok ? "✓" : "✗";
     const label = r.ok ? "responded" : `Error: ${r.error}`;
     console.log(`  ${mark}  ${r.agent.padEnd(agentCol)}  ${r.model.padEnd(modelCol)}  — ${label}`);
+  }
+
+  // Check git hosting CLIs needed by the finish stage
+  console.log("\nChecking git hosting CLIs (required for finish stage PR/MR creation)...\n");
+  const cliResults = [];
+  for (const cli of ["gh", "glab"]) {
+    const r = spawnSync(cli, ["--version"], { stdio: "pipe" });
+    const ok = !r.error && r.status === 0;
+    cliResults.push({ cli, ok });
+    const mark  = ok ? "✓" : "✗";
+    const label = ok ? "available" : "not found (install for finish stage PR/MR support)";
+    console.log(`  ${mark}  ${cli.padEnd(agentCol)}  ${"(CLI)".padEnd(modelCol)}  — ${label}`);
   }
 
   const failures = results.filter(r => !r.ok);
