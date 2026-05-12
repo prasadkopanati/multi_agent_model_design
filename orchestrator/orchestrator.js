@@ -180,6 +180,17 @@ function setupWorktree(workspace, cfg) {
     return null;
   }
 
+  // Guard: workspace must be the git root — not nested inside a parent repo
+  const topLevelResult = spawnSync("git", ["-C", workspace, "rev-parse", "--show-toplevel"],
+    { stdio: "pipe", encoding: "utf-8" });
+  const topLevel = topLevelResult.stdout.trim();
+  if (topLevel && path.resolve(topLevel) !== path.resolve(workspace)) {
+    console.warn(`⚠  Workspace is nested inside a parent git repo (${topLevel}).`);
+    console.warn(`   Commits will go to the parent repo, not ${workspace}.`);
+    console.warn(`   Run agenticspiq from the repo root, or initialize a separate .git in ${workspace}.`);
+    return null;
+  }
+
   const branchName = `spiq/run-${Date.now()}`;
   const worktreePath = cfg.worktreePath;
 
@@ -187,6 +198,14 @@ function setupWorktree(workspace, cfg) {
   if (fs.existsSync(worktreePath)) {
     spawnSync("git", ["-C", workspace, "worktree", "remove", "--force", worktreePath], { stdio: "pipe" });
     try { fs.rmSync(worktreePath, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
+
+  // Guard: git worktree add requires at least one commit
+  const headCheck = spawnSync("git", ["-C", workspace, "rev-parse", "HEAD"], { stdio: "pipe" });
+  if (headCheck.status !== 0) {
+    console.warn("⚠  Workspace git repo has no commits — worktree isolation requires at least one commit.");
+    console.warn("   Run: git commit --allow-empty -m 'init'  in the workspace, then re-run agenticspiq.");
+    return null;
   }
 
   const result = spawnSync(
@@ -476,21 +495,71 @@ function readRequest(cfg) {
   return fs.readFileSync(cfg.reqFile, "utf-8");
 }
 
-async function runPipeline(workspace) {
+function persistSelectedStages(stages, cfg) {
+  try {
+    const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
+    task.selected_stages = stages;
+    fs.writeFileSync(cfg.tasksFile, JSON.stringify(task, null, 2));
+  } catch { /* non-fatal */ }
+}
+
+function validateStages(stages) {
+  if (!stages.includes("spec")) {
+    console.error("Error: --stages must include 'spec' (required for all pipelines)");
+    process.exit(1);
+  }
+  if (!stages.includes("plan")) {
+    console.error("Error: --stages must include 'plan' (required for all pipelines)");
+    process.exit(1);
+  }
+  if (stages.includes("finish") && stages[stages.length - 1] !== "finish") {
+    console.error("Error: 'finish' must be the last stage when included");
+    process.exit(1);
+  }
+  if (stages.includes("build") && !stages.includes("review")) {
+    console.warn("⚠  Warning: 'build' is included but 'review' is not — code will not be reviewed");
+  }
+  if (stages.includes("review") && !stages.includes("test")) {
+    console.warn("⚠  Warning: 'review' is included but 'test' is not — review runs on untested code");
+  }
+}
+
+async function runPipeline(workspace, opts = {}) {
   const cfg = makeWorkspaceConfig(workspace);
   const request = readRequest(cfg);
 
   appendEvent(cfg, "pipeline_start", null, { workspace });
 
+  // Determine effective pipeline (supports --stages selection with resume persistence)
+  let selectedStageNames;
+  try {
+    const task = JSON.parse(fs.readFileSync(cfg.tasksFile, "utf-8"));
+    if (Array.isArray(task.selected_stages) && task.selected_stages.length > 0) {
+      selectedStageNames = task.selected_stages; // resume: restore from tasks.json
+    }
+  } catch { /* non-fatal */ }
+  if (!selectedStageNames) {
+    const stagesInput = opts.stages || process.env.SPIQ_STAGES;
+    if (stagesInput) {
+      selectedStageNames = stagesInput.split(",").map(s => s.trim()).filter(Boolean);
+      validateStages(selectedStageNames);
+      persistSelectedStages(selectedStageNames, cfg);
+    }
+  }
+  const effectivePipeline = selectedStageNames
+    ? PIPELINE.filter(p => selectedStageNames.includes(p.stage))
+    : PIPELINE;
+  const selectedStages = effectivePipeline.map(p => p.stage);
+
   // Determine resume point
   const savedStage = readCurrentStage(cfg);
   const resumeIdx = savedStage && savedStage !== "complete"
-    ? PIPELINE.findIndex(p => p.stage === savedStage)
+    ? effectivePipeline.findIndex(p => p.stage === savedStage)
     : -1;
   const startIdx = resumeIdx >= 0 ? resumeIdx : 0;
 
   if (startIdx > 0) {
-    console.log(`↩  Resuming from stage: ${PIPELINE[startIdx].stage}`);
+    console.log(`↩  Resuming from stage: ${effectivePipeline[startIdx].stage}`);
   }
 
   // Pre-load context from persisted artifacts for stages that already completed
@@ -509,7 +578,7 @@ async function runPipeline(workspace) {
   } catch { /* non-fatal */ }
 
   for (let i = 0; i < startIdx; i++) {
-    const { stage, contextKey, isBrainstorm } = PIPELINE[i];
+    const { stage, contextKey, isBrainstorm } = effectivePipeline[i];
     if (isBrainstorm) {
       if (fs.existsSync(cfg.brainstormFile)) {
         context = { ...context, brainstorm: fs.readFileSync(cfg.brainstormFile, "utf-8") };
@@ -522,8 +591,8 @@ async function runPipeline(workspace) {
     }
   }
 
-  for (let i = startIdx; i < PIPELINE.length; i++) {
-    const { stage, contextKey, requiresApproval, isBrainstorm, usesWorktree } = PIPELINE[i];
+  for (let i = startIdx; i < effectivePipeline.length; i++) {
+    const { stage, contextKey, requiresApproval, isBrainstorm, usesWorktree } = effectivePipeline[i];
     updateCurrentStage(stage, cfg);
     appendEvent(cfg, "stage_start", stage);
 
@@ -567,7 +636,11 @@ async function runPipeline(workspace) {
     if (output) {
       if (stage === "plan") {
         writePlanArtifacts(cfg, output);
-        const selectedSkills = extractSelectedSkills(output);
+        let selectedSkills = extractSelectedSkills(output);
+        // Fallback: agent may have written SELECTED_SKILLS only to plan.md (not echoed in stdout)
+        if (selectedSkills.length === 0 && fs.existsSync(cfg.planFile)) {
+          selectedSkills = extractSelectedSkills(fs.readFileSync(cfg.planFile, "utf-8"));
+        }
         if (selectedSkills.length > 0) {
           console.log(`🎯 Selected skills: ${selectedSkills.join(", ")}`);
           persistSelectedSkills(selectedSkills, cfg);
@@ -642,12 +715,14 @@ async function runPipeline(workspace) {
         runStage("fix", workspace, context, cfg);
         appendEvent(cfg, "stage_complete", "fix");
 
-        console.log(`\n🧪 Re-running test after fix...`);
-        appendEvent(cfg, "stage_start", "test");
-        runStage("test", workspace, context, cfg);
-        const fixTestOutput = readOutputArtifact("test", cfg);
-        if (fixTestOutput) context = { ...context, test: fixTestOutput };
-        appendEvent(cfg, "stage_complete", "test");
+        if (selectedStages.includes("test")) {
+          console.log(`\n🧪 Re-running test after fix...`);
+          appendEvent(cfg, "stage_start", "test");
+          runStage("test", workspace, context, cfg);
+          const fixTestOutput = readOutputArtifact("test", cfg);
+          if (fixTestOutput) context = { ...context, test: fixTestOutput };
+          appendEvent(cfg, "stage_complete", "test");
+        }
 
         console.log(`\n🔍 Re-running review...`);
         updateCurrentStage("review", cfg);
@@ -703,15 +778,18 @@ module.exports = { runStage, runPipeline };
 if (require.main === module) {
   const { parseArgs } = require("node:util");
   const { values } = parseArgs({
-    options: { workspace: { type: "string" } },
+    options: {
+      workspace: { type: "string" },
+      stages:    { type: "string" },
+    },
   });
 
   if (!values.workspace) {
-    console.error("Usage: node orchestrator/orchestrator.js --workspace <path>");
+    console.error("Usage: node orchestrator/orchestrator.js --workspace <path> [--stages <stage1,stage2,...>]");
     process.exit(1);
   }
 
-  runPipeline(values.workspace).catch(err => {
+  runPipeline(values.workspace, { stages: values.stages }).catch(err => {
     console.error("Pipeline error:", err.message);
     process.exit(1);
   });

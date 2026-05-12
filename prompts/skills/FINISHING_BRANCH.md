@@ -110,14 +110,30 @@ If this returns empty (no remote configured):
 # Push branch to remote
 git push -u origin $(git branch --show-current)
 
-# Create the PR with the delivery summary as the body
-gh pr create \
-  --title "[feature title from spec]" \
-  --body "[delivery summary from Step 2]" \
-  --base main
+# Detect remote host and use the appropriate CLI
+REMOTE_URL=$(git remote get-url origin 2>/dev/null)
+
+if echo "$REMOTE_URL" | grep -q "github.com"; then
+  gh pr create \
+    --title "[feature title from spec]" \
+    --body "[delivery summary from Step 2]" \
+    --base main
+elif echo "$REMOTE_URL" | grep -q "gitlab.com\|gitlab\."; then
+  glab mr create \
+    --title "[feature title from spec]" \
+    --description "[delivery summary from Step 2]" \
+    --target-branch main \
+    --yes
+else
+  echo "⚠  Unknown remote host — push succeeded but MR/PR must be created manually."
+fi
 ```
 
-On success, print the PR URL.
+On success, print the PR/MR URL.
+
+**Prerequisite**: Install and authenticate the appropriate CLI before running the finish stage:
+- GitHub: `gh auth login`
+- GitLab: `brew install glab && glab auth login`
 
 **`merge` — Merge into main**
 
