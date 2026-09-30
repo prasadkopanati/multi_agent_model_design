@@ -816,5 +816,5 @@ Implement in dependency order. The event log is the foundation most downstream f
 ---
 
 *Last updated: 2026-04-28*
-*Based on: Stoneforge README at `/Users/kris/code/personal/stoneforge/README.md`*
-*Evaluated against: agenticspiq at `/Users/kris/code/personal/multi_agent_model_design/`*
+*Based on: Stoneforge README at `~/code/personal/stoneforge/README.md`*
+*Evaluated against: agenticspiq at `~/code/personal/multi_agent_model_design/`*

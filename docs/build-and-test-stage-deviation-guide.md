@@ -695,10 +695,10 @@ This is safe: the worktree is isolated from the main workspace, the last committ
 
 ```
 Error executing tool read_file: Path not in workspace: Attempted path
-"/Users/kris/code/personal/mat_latest_voiceai_projs/.spiq-worktree/.spiq/skills/FINISHING_BRANCH.md"
+"~/code/personal/mat_latest_voiceai_projs/.spiq-worktree/.spiq/skills/FINISHING_BRANCH.md"
 resolves outside the allowed workspace directories:
-/Users/kris/code/personal/mat_latest_voiceai_projs/.spiq-worktree
-or the project temp directory: /Users/kris/.gemini/tmp/spiq-worktree
+~/code/personal/mat_latest_voiceai_projs/.spiq-worktree
+or the project temp directory: ~/.gemini/tmp/spiq-worktree
 ```
 
 This error fired twice (Gemini retried once). Gemini then proceeded through the finish stage with no access to `FINISHING_BRANCH.md`.
@@ -1009,5 +1009,5 @@ The current policy uses `commandRegex = ".*"` to bypass all of Gemini CLI's dang
 - [`review-fix-loop-guide.md`](review-fix-loop-guide.md) — how the review → fix → test retry cycle is orchestrated
 
 **Session logs that informed the fix/finish stage sections:**
-- `/Users/kris/code/personal/mat_latest_voiceai_projs/ai_debug/session_1.md` — first Review FAIL retry (fix attempt 1)
-- `/Users/kris/code/personal/mat_latest_voiceai_projs/ai_debug/session_2.md` — second Review FAIL retry and finish stage (fix attempt 2 → PASS → finish)
+- `~/code/personal/mat_latest_voiceai_projs/ai_debug/session_1.md` — first Review FAIL retry (fix attempt 1)
+- `~/code/personal/mat_latest_voiceai_projs/ai_debug/session_2.md` — second Review FAIL retry and finish stage (fix attempt 2 → PASS → finish)

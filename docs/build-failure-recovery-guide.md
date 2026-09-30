@@ -28,7 +28,7 @@ The build stage has failed once. `current_stage` stays at `"build"`. The orchest
       "stage": "build",
       "error": "Error: opencode exited with code 1 — build agent failed to produce output",
       "timestamp": 1745462400000,
-      "workspace": "/Users/kris/projects/my-feature"
+      "workspace": "~/projects/my-feature"
     },
     "history": [
       {
@@ -62,7 +62,7 @@ After 4 build failures (`> retry_limit` of 3), `shouldEscalate()` returns true, 
       "stage": "build",
       "error": "Error: TypeScript compilation failed — module 'src/api.ts' not found",
       "timestamp": 1745465200000,
-      "workspace": "/Users/kris/projects/my-feature"
+      "workspace": "~/projects/my-feature"
     },
     "history": [
       { "stage": "build", "error": "Error: opencode exited with code 1", "time": 1745462400000 },

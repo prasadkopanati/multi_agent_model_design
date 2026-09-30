@@ -2,7 +2,7 @@
 
 ## Overview
 
-This session focused on three areas: pipeline state documentation, agent skill expansion, and agent git identity. All changes were applied to the `agenticspiq` module at `/Users/kris/code/personal/multi_agent_model_design`.
+This session focused on three areas: pipeline state documentation, agent skill expansion, and agent git identity. All changes were applied to the `agenticspiq` module at `~/code/personal/multi_agent_model_design`.
 
 ---
 
